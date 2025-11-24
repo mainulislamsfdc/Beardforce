@@ -1,0 +1,7 @@
+{
+  "name": "BeardForce CRM AI",
+  "description": "A multi-agent AI-driven CRM for men's grooming products, managed by a virtual executive team.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
