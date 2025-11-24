@@ -145,6 +145,9 @@ export class GeminiService {
     
     // Setup Audio Contexts for Playback
     const outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    // Resume immediately in case of autoplay policy
+    await outputAudioContext.resume();
+    
     const outputNode = outputAudioContext.createGain();
     outputNode.connect(outputAudioContext.destination);
     
@@ -211,32 +214,41 @@ export class GeminiService {
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
-          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } // A deep, masculine voice suitable for beard products
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
         },
         systemInstruction: `You are a group of assistants (Sales, Marketing, IT, CEO) for a Beard Product company. 
         You are in a voice meeting with the founder. Keep responses concise and conversational.
         If the user asks to create a ticket, lead, or campaign, use the tools.`,
         tools: [{ functionDeclarations: [createTicketTool, createLeadTool, createCampaignTool] }],
-        inputAudioTranscription: {}, // Corrected: Empty object to enable transcription
+        inputAudioTranscription: {},
         outputAudioTranscription: {} 
       }
     });
 
     // Return a function to send audio blobs to the session
     return async (pcmBlob: Blob) => {
-        const session = await sessionPromise;
-        // Convert Blob to base64 and send
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const base64data = (reader.result as string).split(',')[1];
-            session.sendRealtimeInput({
-                media: {
-                    mimeType: 'audio/pcm;rate=16000',
-                    data: base64data
+        try {
+            const session = await sessionPromise;
+            // Convert Blob to base64 and send
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64data = (reader.result as string).split(',')[1];
+                try {
+                    session.sendRealtimeInput({
+                        media: {
+                            mimeType: 'audio/pcm;rate=16000',
+                            data: base64data
+                        }
+                    });
+                } catch (e) {
+                    console.error("Error sending realtime input:", e);
                 }
-            });
-        };
-        reader.readAsDataURL(pcmBlob);
+            };
+            reader.readAsDataURL(pcmBlob);
+        } catch (e) {
+             // Session likely failed to connect or closed
+             console.warn("Skipping audio send, session not ready.");
+        }
     };
   }
 
