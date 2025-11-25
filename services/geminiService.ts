@@ -60,6 +60,7 @@ export class GeminiService {
   private logTrace?: (input: string, output: string, latency: number, status: 'success' | 'error') => void;
 
   constructor(config: AppConfig, tools: ToolCalls, logTrace?: (i:string, o:string, l:number, s:any)=>void) {
+    // Vite handles process.env.API_KEY replacement via define in vite.config.ts
     this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
     this.tools = tools;
     this.config = config;
