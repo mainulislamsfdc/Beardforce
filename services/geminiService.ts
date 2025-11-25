@@ -1,7 +1,5 @@
 import { GoogleGenAI, FunctionDeclaration, Type, LiveServerMessage, Modality } from "@google/genai";
-import { AgentRole } from "../types";
-
-// --- Types & Interfaces for Service ---
+import { AgentRole, AppConfig } from "../types";
 
 export interface ToolCalls {
   createTicket?: (title: string, description: string, assignee: string) => string;
@@ -9,17 +7,15 @@ export interface ToolCalls {
   createCampaign?: (name: string, platform: string, budget: number) => string;
 }
 
-// --- Tool Definitions ---
-
 const createTicketTool: FunctionDeclaration = {
   name: 'createTicket',
-  description: 'Create a new requirement ticket or task in the Jira system.',
+  description: 'Create a new requirement ticket or task in the database.',
   parameters: {
     type: Type.OBJECT,
     properties: {
       title: { type: Type.STRING },
       description: { type: Type.STRING },
-      assignee: { type: Type.STRING, description: "Role must be exactly one of: 'IT Manager', 'Sales Manager', 'Market Manager', 'CEO'" }
+      assignee: { type: Type.STRING, description: "Name of the agent assigned" }
     },
     required: ['title', 'description', 'assignee']
   }
@@ -27,13 +23,13 @@ const createTicketTool: FunctionDeclaration = {
 
 const createLeadTool: FunctionDeclaration = {
   name: 'createLead',
-  description: 'Add a new sales lead to the CRM.',
+  description: 'Add a new potential client/lead to the CRM.',
   parameters: {
     type: Type.OBJECT,
     properties: {
       name: { type: Type.STRING },
       email: { type: Type.STRING },
-      value: { type: Type.NUMBER, description: 'Estimated potential value in USD' }
+      value: { type: Type.NUMBER }
     },
     required: ['name', 'email', 'value']
   }
@@ -41,65 +37,72 @@ const createLeadTool: FunctionDeclaration = {
 
 const createCampaignTool: FunctionDeclaration = {
   name: 'createCampaign',
-  description: 'Launch a new marketing campaign.',
+  description: 'Launch a new marketing ad campaign.',
   parameters: {
     type: Type.OBJECT,
     properties: {
       name: { type: Type.STRING },
-      platform: { type: Type.STRING, description: "e.g. 'Facebook', 'Instagram', 'Google', 'Email'" },
+      platform: { type: Type.STRING },
       budget: { type: Type.NUMBER }
     },
     required: ['name', 'platform', 'budget']
   }
 };
 
-// --- Service Implementation ---
-
 export class GeminiService {
   private ai: GoogleGenAI;
   private tools: ToolCalls;
+  private config: AppConfig;
   private modelName = 'gemini-2.5-flash';
   private liveModelName = 'gemini-2.5-flash-native-audio-preview-09-2025';
+  
+  // Observability Callback
+  private logTrace?: (input: string, output: string, latency: number, status: 'success' | 'error') => void;
 
-  constructor(tools: ToolCalls) {
-    // Assuming process.env.API_KEY is available
+  constructor(config: AppConfig, tools: ToolCalls, logTrace?: (i:string, o:string, l:number, s:any)=>void) {
     this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
     this.tools = tools;
+    this.config = config;
+    this.logTrace = logTrace;
   }
 
-  // --- Standard Chat ---
-  async sendMessage(history: string[], message: string): Promise<string> {
-    const systemInstruction = `
-      You are a simulated team of 4 agents managing a Beard Product CRM.
-      Roles: 
-      1. IT Manager: Technical, precise, manages database/tickets.
-      2. Sales Manager: Energetic, focused on revenue/leads.
-      3. Market Manager: Creative, focused on ads/growth.
-      4. CEO: Strategic, focuses on overview and expenses.
+  private getSystemInstruction(): string {
+    const { businessName, industry, agentNames } = this.config;
+    return `
+      You are an elite executive team running "${businessName}", a company in the "${industry}" industry.
       
-      The user is the Founder/Owner.
+      THE TEAM (Your Personas):
+      1. IT/Tech: "${agentNames[AgentRole.IT]}". Precise, data-driven, maintains the system.
+      2. Sales: "${agentNames[AgentRole.SALES]}". Aggressive, charming, focuses on revenue.
+      3. Marketing: "${agentNames[AgentRole.MARKETING]}". Creative, trendy, focuses on brand.
+      4. CEO: "${agentNames[AgentRole.CEO]}". Strategic, decisive, keeps the team focused.
       
-      When you respond, assume the persona of the most relevant agent for the query. 
-      You can also have multiple agents chime in if complex.
-      Prefix every paragraph with the Agent's Role like "[Sales Manager]: ...".
-      
-      If the user asks to do something, use the available tools.
+      PROTOCOL:
+      - The user is the Owner/Founder.
+      - Use the "[Agent Name]" prefix when speaking.
+      - You are autonomous. If the user asks to "run ads", the Marketing agent should use the tool immediately.
+      - Collaborate. Agents can talk to each other.
     `;
+  }
 
+  async sendMessage(history: string[], message: string): Promise<string> {
+    const startTime = performance.now();
     try {
       const response = await this.ai.models.generateContent({
         model: this.modelName,
         contents: [
-          { role: 'user', parts: [{ text: `History:\n${history.join('\n')}\n\nUser Input: ${message}` }] }
+          { role: 'user', parts: [{ text: `Conversation History:\n${history.join('\n')}\n\nUser Input: ${message}` }] }
         ],
         config: {
-          systemInstruction,
+          systemInstruction: this.getSystemInstruction(),
           tools: [{ functionDeclarations: [createTicketTool, createLeadTool, createCampaignTool] }]
         }
       });
 
-      // Handle function calls if any
+      let finalText = response.text || "";
       const functionCalls = response.functionCalls;
+
+      // Handle Function Calling (Agent Tool Use)
       if (functionCalls && functionCalls.length > 0) {
         let toolOutputs: string[] = [];
         
@@ -114,43 +117,45 @@ export class GeminiService {
           } else if (name === 'createCampaign' && this.tools.createCampaign) {
              result = this.tools.createCampaign(args.name as string, args.platform as string, args.budget as number);
           }
-          toolOutputs.push(`${name} executed: ${result}`);
+          toolOutputs.push(`Tool ${name} executed. Result: ${result}`);
         }
         
-        // Send tool response back to get final text
+        // Feed tool output back to model for final narrative
         const finalResponse = await this.ai.models.generateContent({
           model: this.modelName,
           contents: [
             { role: 'user', parts: [{ text: `History:\n${history.join('\n')}\n\nUser Input: ${message}` }] },
-            { role: 'model', parts: [{ functionCall: functionCalls[0] }] }, // Simplified for single turn
-            { role: 'user', parts: [{ text: `Tool Output: ${toolOutputs.join('\n')}. Now summarize what happened for the user.` }] }
+            { role: 'model', parts: [{ functionCall: functionCalls[0] }] }, 
+            { role: 'user', parts: [{ text: `System Tool Output: ${toolOutputs.join('\n')}. Provide final update to user.` }] }
           ]
         });
-        return finalResponse.text || "Command executed.";
+        finalText = finalResponse.text || "Operations completed.";
       }
 
-      return response.text || "I didn't catch that.";
-    } catch (error) {
+      // Trace Logging
+      const latency = performance.now() - startTime;
+      if (this.logTrace) {
+        this.logTrace(message, finalText, latency, 'success');
+      }
+
+      return finalText;
+    } catch (error: any) {
       console.error("Gemini Error:", error);
-      return "[System]: Error connecting to AI team.";
+      const latency = performance.now() - startTime;
+      if (this.logTrace) this.logTrace(message, error.message, latency, 'error');
+      return "[System Error]: Unable to reach the AI agents.";
     }
   }
-
-  // --- Live API (Audio) ---
 
   async connectLive(
     onAudioData: (base64Audio: string) => void,
     onTranscript: (text: string, isUser: boolean) => void
   ): Promise<(blob: Blob) => void> {
     
-    // Setup Audio Contexts for Playback
     const outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-    // Resume immediately in case of autoplay policy
     await outputAudioContext.resume();
-    
     const outputNode = outputAudioContext.createGain();
     outputNode.connect(outputAudioContext.destination);
-    
     let nextStartTime = 0;
 
     const sessionPromise = this.ai.live.connect({
@@ -158,20 +163,15 @@ export class GeminiService {
       callbacks: {
         onopen: () => console.log("Live Session Opened"),
         onmessage: async (message: LiveServerMessage) => {
-            // Handle Transcription
             if (message.serverContent?.outputTranscription) {
                 onTranscript(message.serverContent.outputTranscription.text, false);
             } else if (message.serverContent?.inputTranscription) {
                 onTranscript(message.serverContent.inputTranscription.text, true);
             }
 
-            // Handle Audio Output
             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio) {
-                // Pass to UI for visualizer if needed
                 onAudioData(base64Audio);
-
-                // Play Audio
                 nextStartTime = Math.max(nextStartTime, outputAudioContext.currentTime);
                 const audioBytes = this.decode(base64Audio);
                 const audioBuffer = await this.decodeAudioData(audioBytes, outputAudioContext, 24000, 1);
@@ -182,10 +182,8 @@ export class GeminiService {
                 nextStartTime += audioBuffer.duration;
             }
             
-            // Handle Tool Calls in Live Mode
              if (message.toolCall) {
                 for (const fc of message.toolCall.functionCalls) {
-                   // Execute tool
                    let result = "Success";
                    if (fc.name === 'createTicket' && this.tools.createTicket) {
                         result = this.tools.createTicket(fc.args.title as string, fc.args.description as string, fc.args.assignee as string);
@@ -195,7 +193,6 @@ export class GeminiService {
                         result = this.tools.createCampaign(fc.args.name as string, fc.args.platform as string, fc.args.budget as number);
                    }
                    
-                   // Send response
                    sessionPromise.then(session => {
                        session.sendToolResponse({
                            functionResponses: {
@@ -216,20 +213,16 @@ export class GeminiService {
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
         },
-        systemInstruction: `You are a group of assistants (Sales, Marketing, IT, CEO) for a Beard Product company. 
-        You are in a voice meeting with the founder. Keep responses concise and conversational.
-        If the user asks to create a ticket, lead, or campaign, use the tools.`,
+        systemInstruction: this.getSystemInstruction(), // Use dynamic instructions
         tools: [{ functionDeclarations: [createTicketTool, createLeadTool, createCampaignTool] }],
         inputAudioTranscription: {},
         outputAudioTranscription: {} 
       }
     });
 
-    // Return a function to send audio blobs to the session
     return async (pcmBlob: Blob) => {
         try {
             const session = await sessionPromise;
-            // Convert Blob to base64 and send
             const reader = new FileReader();
             reader.onloadend = () => {
                 const base64data = (reader.result as string).split(',')[1];
@@ -240,19 +233,13 @@ export class GeminiService {
                             data: base64data
                         }
                     });
-                } catch (e) {
-                    console.error("Error sending realtime input:", e);
-                }
+                } catch (e) { console.error(e); }
             };
             reader.readAsDataURL(pcmBlob);
-        } catch (e) {
-             // Session likely failed to connect or closed
-             console.warn("Skipping audio send, session not ready.");
-        }
+        } catch (e) { console.warn("Session not ready"); }
     };
   }
 
-  // Helper: Decode Base64 to Uint8Array
   private decode(base64: string): Uint8Array {
     const binaryString = atob(base64);
     const len = binaryString.length;
@@ -263,12 +250,10 @@ export class GeminiService {
     return bytes;
   }
 
-  // Helper: Decode Raw PCM to AudioBuffer
   private async decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: number, numChannels: number): Promise<AudioBuffer> {
     const dataInt16 = new Int16Array(data.buffer);
     const frameCount = dataInt16.length / numChannels;
     const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
-
     for (let channel = 0; channel < numChannels; channel++) {
       const channelData = buffer.getChannelData(channel);
       for (let i = 0; i < frameCount; i++) {
@@ -279,7 +264,6 @@ export class GeminiService {
   }
 }
 
-// Utility to create PCM blob from Float32Array (Microphone input)
 export function createPCMBlob(data: Float32Array): Blob {
   const l = data.length;
   const int16 = new Int16Array(l);

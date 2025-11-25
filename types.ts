@@ -3,7 +3,7 @@ export enum AgentRole {
   SALES = 'Sales Manager',
   MARKETING = 'Market Manager',
   IT = 'IT Manager',
-  USER = 'You'
+  USER = 'User'
 }
 
 export enum TicketStatus {
@@ -12,12 +12,61 @@ export enum TicketStatus {
   DONE = 'Done'
 }
 
+// --- Configuration & Auth ---
+
+export interface AppConfig {
+  businessName: string;
+  industry: string;
+  agentNames: {
+    [key in AgentRole]?: string;
+  };
+  themeColor: string;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: 'admin' | 'viewer';
+}
+
+// --- Observability (Logs, Traces, Metrics) ---
+
+export interface Metric {
+  id: string;
+  name: string; // e.g. 'llm_latency', 'token_usage'
+  value: number;
+  unit: string;
+  timestamp: string;
+}
+
+export interface Trace {
+  id: string;
+  requestId: string;
+  input: string;
+  output: string;
+  latencyMs: number;
+  model: string;
+  timestamp: string;
+  status: 'success' | 'error';
+}
+
+export interface SystemLog {
+  id: string;
+  timestamp: string;
+  action: string;
+  agent: string; // Changed from enum to string to support custom names
+  level: 'info' | 'warn' | 'error';
+}
+
+// --- Domain Entities ---
+
 export interface Ticket {
   id: string;
   title: string;
   description: string;
   status: TicketStatus;
-  assignee: AgentRole;
+  assignee: string; // Dynamic name
   createdAt: string;
 }
 
@@ -47,16 +96,10 @@ export interface Expense {
   approved: boolean;
 }
 
-export interface SystemLog {
-  id: string;
-  timestamp: string;
-  action: string;
-  agent: AgentRole;
-}
-
 export interface ChatMessage {
   id: string;
-  role: AgentRole;
+  role: string; // Dynamic
+  roleType: AgentRole; // Fixed enum for logic
   text: string;
   timestamp: Date;
   isAudio?: boolean;
