@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Megaphone, Server, FolderKanban, MessageSquare, Briefcase, LogOut, Settings } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Server, FolderKanban, MessageSquare, Briefcase, LogOut, Settings, Box, Database, Activity, Globe } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { DatabaseService } from '../services/db';
 
@@ -9,7 +9,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
-  const { config, setUser } = useStore();
+  const { config, setUser, customPages } = useStore();
   
   const handleLogout = async () => {
     await DatabaseService.logout();
@@ -25,6 +25,16 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
     { id: 'projects', label: 'Project Board', icon: FolderKanban },
   ];
 
+  // Map string icon names to Lucide components for custom pages
+  const iconMap: any = {
+      box: Box,
+      database: Database,
+      activity: Activity,
+      globe: Globe,
+      server: Server,
+      briefcase: Briefcase
+  };
+
   return (
     <div className="w-64 bg-slate-900 border-r border-slate-800 h-screen flex flex-col">
       <div className="p-6 border-b border-slate-800 flex items-center gap-3">
@@ -34,7 +44,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
         <h1 className="text-sm font-bold text-slate-100 tracking-tight truncate">{config?.businessName || 'CRM'}</h1>
       </div>
       
-      <nav className="flex-1 p-4 space-y-2">
+      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentView === item.id;
@@ -53,6 +63,31 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
             </button>
           );
         })}
+
+        {/* Custom Pages Section */}
+        {customPages.length > 0 && (
+            <div className="pt-4 mt-4 border-t border-slate-800">
+                <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Modules</p>
+                {customPages.map(page => {
+                    const Icon = iconMap[page.icon] || Box;
+                    const isActive = currentView === page.id;
+                    return (
+                        <button
+                            key={page.id}
+                            onClick={() => setView(page.id)}
+                            className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-colors ${
+                                isActive 
+                                ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' 
+                                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                            }`}
+                        >
+                            <Icon size={18} />
+                            <span className="font-medium text-sm">{page.name}</span>
+                        </button>
+                    );
+                })}
+            </div>
+        )}
       </nav>
 
       <div className="p-4 border-t border-slate-800 space-y-2">

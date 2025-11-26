@@ -7,6 +7,7 @@ export interface ToolCalls {
   createCampaign?: (name: string, platform: string, budget: number) => string;
   changeDashboard?: (view: string) => string;
   getRecentItems?: (type: string) => Promise<string>;
+  deployAppModule?: (schema: string) => string;
 }
 
 const createTicketTool: FunctionDeclaration = {
@@ -57,7 +58,7 @@ const changeDashboardTool: FunctionDeclaration = {
   parameters: {
     type: Type.OBJECT,
     properties: {
-      view: { type: Type.STRING, description: "One of: 'sales', 'marketing', 'it', 'ceo', 'projects', 'meeting'" }
+      view: { type: Type.STRING, description: "One of: 'sales', 'marketing', 'it', 'ceo', 'projects', 'meeting', OR a custom page ID if created." }
     },
     required: ['view']
   }
@@ -69,9 +70,21 @@ const getRecentItemsTool: FunctionDeclaration = {
     parameters: {
         type: Type.OBJECT,
         properties: {
-            type: { type: Type.STRING, description: "One of: 'leads', 'tickets', 'campaigns'" }
+            type: { type: Type.STRING, description: "One of: 'leads', 'tickets', 'campaigns', 'pages'" }
         },
         required: ['type']
+    }
+};
+
+const deployAppModuleTool: FunctionDeclaration = {
+    name: 'deployAppModule',
+    description: 'IT MANAGER ONLY. Deploy a new custom page/module. Schema JSON must follow DynamicPage interface: { id, name, route, description, icon, widgets: [{id, type, title, dataSource, config, gridColSpan}] }.',
+    parameters: {
+        type: Type.OBJECT,
+        properties: {
+            schema: { type: Type.STRING, description: "Valid JSON string defining the DynamicPage." }
+        },
+        required: ['schema']
     }
 };
 
@@ -97,7 +110,7 @@ export class GeminiService {
       You are an elite executive team running "${businessName}", a company in the "${industry}" industry.
       
       THE TEAM (Your Personas):
-      1. IT/Tech: "${agentNames[AgentRole.IT]}". Precise, data-driven, maintains the system.
+      1. IT/Tech: "${agentNames[AgentRole.IT]}". Precise, data-driven, maintains the system. CAN DEPLOY NEW PAGES using 'deployAppModule'.
       2. Sales: "${agentNames[AgentRole.SALES]}". Aggressive, charming, focuses on revenue.
       3. Marketing: "${agentNames[AgentRole.MARKETING]}". Creative, trendy, focuses on brand.
       4. CEO: "${agentNames[AgentRole.CEO]}". Strategic, decisive, keeps the team focused.
@@ -105,8 +118,9 @@ export class GeminiService {
       PROTOCOL:
       - The user is the Owner/Founder.
       - Use the "[Agent Name]" prefix when speaking.
-      - You can NAVIGATE the UI using 'changeDashboard'. If the user asks to "see sales", use the tool.
-      - You can READ data using 'getRecentItems'. If user asks "what leads do we have?", use the tool first.
+      - You can NAVIGATE the UI using 'changeDashboard'.
+      - You can READ data using 'getRecentItems'.
+      - If user asks for a new feature/page (e.g. "Create an Inventory page"), the IT Manager should generate a valid JSON schema and call 'deployAppModule'.
     `;
   }
 
@@ -120,7 +134,7 @@ export class GeminiService {
         ],
         config: {
           systemInstruction: this.getSystemInstruction(),
-          tools: [{ functionDeclarations: [createTicketTool, createLeadTool, createCampaignTool, changeDashboardTool, getRecentItemsTool] }]
+          tools: [{ functionDeclarations: [createTicketTool, createLeadTool, createCampaignTool, changeDashboardTool, getRecentItemsTool, deployAppModuleTool] }]
         }
       });
 
@@ -144,6 +158,8 @@ export class GeminiService {
              result = this.tools.changeDashboard(args.view as string);
           } else if (name === 'getRecentItems' && this.tools.getRecentItems) {
              result = await this.tools.getRecentItems(args.type as string);
+          } else if (name === 'deployAppModule' && this.tools.deployAppModule) {
+             result = this.tools.deployAppModule(args.schema as string);
           }
           toolOutputs.push(`Tool ${name} executed. Result: ${result}`);
         }
@@ -219,6 +235,8 @@ export class GeminiService {
                         result = this.tools.createCampaign(fc.args.name as string, fc.args.platform as string, fc.args.budget as number);
                    } else if (fc.name === 'changeDashboard' && this.tools.changeDashboard) {
                         result = this.tools.changeDashboard(fc.args.view as string);
+                   } else if (fc.name === 'deployAppModule' && this.tools.deployAppModule) {
+                        result = this.tools.deployAppModule(fc.args.schema as string);
                    }
                    
                    sessionPromise.then(session => {
@@ -242,7 +260,7 @@ export class GeminiService {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
         },
         systemInstruction: this.getSystemInstruction(),
-        tools: [{ functionDeclarations: [createTicketTool, createLeadTool, createCampaignTool, changeDashboardTool] }],
+        tools: [{ functionDeclarations: [createTicketTool, createLeadTool, createCampaignTool, changeDashboardTool, deployAppModuleTool] }],
         inputAudioTranscription: {},
         outputAudioTranscription: {} 
       }

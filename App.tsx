@@ -9,11 +9,12 @@ import ProjectBoard from './components/ProjectBoard';
 import SetupWizard from './components/SetupWizard';
 import Settings from './components/Settings';
 import Auth from './components/Auth';
+import DynamicPageRenderer from './components/DynamicPageRenderer';
 import { StoreProvider, useStore } from './context/StoreContext';
 import { Loader2 } from 'lucide-react';
 
 const DashboardLayout: React.FC = () => {
-  const { user, config, isLoading, currentView, navigateTo } = useStore();
+  const { user, config, isLoading, currentView, navigateTo, customPages } = useStore();
 
   if (isLoading) {
     return (
@@ -52,6 +53,11 @@ const DashboardLayout: React.FC = () => {
       case 'settings':
         return <Settings />;
       default:
+        // Check for Custom Pages
+        const customPage = customPages.find(p => p.id === currentView);
+        if (customPage) {
+            return <DynamicPageRenderer page={customPage} />;
+        }
         return <MeetingRoom />;
     }
   };

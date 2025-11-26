@@ -114,3 +114,23 @@ export interface ChatMessage {
   timestamp: Date;
   isAudio?: boolean;
 }
+
+// --- Dynamic Low-Code Engine ---
+
+export interface PageWidget {
+  id: string;
+  type: 'statCard' | 'table' | 'chart' | 'header';
+  title: string;
+  dataSource?: 'leads' | 'tickets' | 'campaigns' | 'expenses'; // Which data store to bind to
+  config?: any; // Flexible config for specific widget types
+  gridColSpan?: number; // 1 (full), 2 (half), 3 (third) - based on 3 col grid
+}
+
+export interface DynamicPage {
+  id: string;
+  name: string;
+  route: string;
+  description: string;
+  icon: string; // Lucide icon name string
+  widgets: PageWidget[];
+}

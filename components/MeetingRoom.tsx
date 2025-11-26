@@ -6,7 +6,7 @@ import { AgentRole, ChatMessage } from '../types';
 import { AGENT_COLORS } from '../constants';
 
 const MeetingRoom: React.FC = () => {
-  const { addTicket, addLead, addCampaign, config, recordTrace, navigateTo, leads, tickets, campaigns } = useStore();
+  const { addTicket, addLead, addCampaign, addCustomPage, config, recordTrace, navigateTo, leads, tickets, campaigns, customPages } = useStore();
   
   // Chat State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -58,7 +58,20 @@ const MeetingRoom: React.FC = () => {
             if(type.includes('lead')) return JSON.stringify(leads.slice(-5));
             if(type.includes('ticket')) return JSON.stringify(tickets.slice(-5));
             if(type.includes('campaign')) return JSON.stringify(campaigns.slice(-5));
+            if(type.includes('page')) return JSON.stringify(customPages);
             return "No data found.";
+        },
+        deployAppModule: (schema) => {
+            try {
+                // Ensure it's parsed if passed as string
+                const pageData = typeof schema === 'string' ? JSON.parse(schema) : schema;
+                const res = addCustomPage(pageData);
+                // Auto navigate to the new page to show user
+                setTimeout(() => navigateTo(pageData.id), 1000);
+                return res;
+            } catch (e) {
+                return "Failed to deploy module: Invalid JSON schema.";
+            }
         }
       },
       // Observability Hook
@@ -73,7 +86,7 @@ const MeetingRoom: React.FC = () => {
           });
       }
     );
-  }, [config, addTicket, addLead, addCampaign, recordTrace, navigateTo, leads, tickets, campaigns]);
+  }, [config, addTicket, addLead, addCampaign, addCustomPage, recordTrace, navigateTo, leads, tickets, campaigns, customPages]);
 
   // Auto-scroll chat
   useEffect(() => {

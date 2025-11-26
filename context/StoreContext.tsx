@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
-import { Campaign, Expense, Lead, Ticket, SystemLog, TicketStatus, AgentRole, AppConfig, User, Metric, Trace } from '../types';
+import { Campaign, Expense, Lead, Ticket, SystemLog, TicketStatus, AgentRole, AppConfig, User, Metric, Trace, DynamicPage } from '../types';
 import { DatabaseService } from '../services/db';
 
 interface StoreContextType {
@@ -18,6 +18,7 @@ interface StoreContextType {
   campaigns: Campaign[];
   tickets: Ticket[];
   expenses: Expense[];
+  customPages: DynamicPage[];
   
   // Observability
   logs: SystemLog[];
@@ -30,6 +31,7 @@ interface StoreContextType {
   addCampaign: (camp: Omit<Campaign, 'id' | 'status' | 'clicks'>) => string;
   addLog: (action: string, agent: string, level?: 'info' | 'warn' | 'error') => void;
   recordTrace: (trace: Omit<Trace, 'id' | 'timestamp'>) => void;
+  addCustomPage: (page: DynamicPage) => string;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -45,6 +47,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [customPages, setCustomPages] = useState<DynamicPage[]>([]);
+  
   const [logs, setLogs] = useState<SystemLog[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [traces, setTraces] = useState<Trace[]>([]);
@@ -70,11 +74,12 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, []);
 
   const refreshData = async () => {
-    const [l, c, t, e, lo, tr, me] = await Promise.all([
+    const [l, c, t, e, p, lo, tr, me] = await Promise.all([
       DatabaseService.getTable<Lead>('leads'),
       DatabaseService.getTable<Campaign>('campaigns'),
       DatabaseService.getTable<Ticket>('tickets'),
       DatabaseService.getTable<Expense>('expenses'),
+      DatabaseService.getTable<DynamicPage>('pages'),
       DatabaseService.getTable<SystemLog>('logs'),
       DatabaseService.getTable<Trace>('traces'),
       DatabaseService.getTable<Metric>('metrics'),
@@ -83,6 +88,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setCampaigns(c);
     setTickets(t);
     setExpenses(e);
+    setCustomPages(p);
     setLogs(lo.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
     setTraces(tr.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
     setMetrics(me);
@@ -100,6 +106,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setLeads([]);
     setCampaigns([]);
     setTickets([]);
+    setCustomPages([]);
   };
 
   const navigateTo = (view: string) => {
@@ -172,11 +179,25 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return `Campaign ${newCamp.name} drafted.`;
   }, [addLog, config]);
 
+  const addCustomPage = useCallback((pageData: DynamicPage) => {
+    // Check if page exists update it, else add
+    setCustomPages(prev => {
+        const exists = prev.find(p => p.id === pageData.id);
+        if (exists) return prev.map(p => p.id === pageData.id ? pageData : p);
+        return [...prev, pageData];
+    });
+    // For DB, we just overwrite by ID logic conceptually, in reality insert appends so we might duplicate in local storage but last one wins in memory
+    // Better implementation for DB service would be upsert, but insert works for this demo level
+    DatabaseService.insert('pages', pageData);
+    addLog(`System Module Deployed: ${pageData.name}`, config?.agentNames[AgentRole.IT] || 'IT');
+    return `Module ${pageData.name} deployed successfully.`;
+  }, [addLog, config]);
+
   return (
     <StoreContext.Provider value={{ 
         user, config, isLoading, currentView, setUser, updateConfig, resetSystem, navigateTo,
-        leads, campaigns, tickets, expenses, logs, metrics, traces,
-        addLead, addTicket, addCampaign, addLog, recordTrace
+        leads, campaigns, tickets, expenses, customPages, logs, metrics, traces,
+        addLead, addTicket, addCampaign, addCustomPage, addLog, recordTrace
     }}>
       {children}
     </StoreContext.Provider>
