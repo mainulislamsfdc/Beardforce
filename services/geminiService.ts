@@ -5,6 +5,8 @@ export interface ToolCalls {
   createTicket?: (title: string, description: string, assignee: string) => string;
   createLead?: (name: string, email: string, value: number) => string;
   createCampaign?: (name: string, platform: string, budget: number) => string;
+  changeDashboard?: (view: string) => string;
+  getRecentItems?: (type: string) => Promise<string>;
 }
 
 const createTicketTool: FunctionDeclaration = {
@@ -49,6 +51,30 @@ const createCampaignTool: FunctionDeclaration = {
   }
 };
 
+const changeDashboardTool: FunctionDeclaration = {
+  name: 'changeDashboard',
+  description: 'Navigate the user interface to a specific dashboard view.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      view: { type: Type.STRING, description: "One of: 'sales', 'marketing', 'it', 'ceo', 'projects', 'meeting'" }
+    },
+    required: ['view']
+  }
+};
+
+const getRecentItemsTool: FunctionDeclaration = {
+    name: 'getRecentItems',
+    description: 'Retrieve the most recent data items from the database.',
+    parameters: {
+        type: Type.OBJECT,
+        properties: {
+            type: { type: Type.STRING, description: "One of: 'leads', 'tickets', 'campaigns'" }
+        },
+        required: ['type']
+    }
+};
+
 export class GeminiService {
   private ai: GoogleGenAI;
   private tools: ToolCalls;
@@ -56,11 +82,9 @@ export class GeminiService {
   private modelName = 'gemini-2.5-flash';
   private liveModelName = 'gemini-2.5-flash-native-audio-preview-09-2025';
   
-  // Observability Callback
   private logTrace?: (input: string, output: string, latency: number, status: 'success' | 'error') => void;
 
   constructor(config: AppConfig, tools: ToolCalls, logTrace?: (i:string, o:string, l:number, s:any)=>void) {
-    // Vite handles process.env.API_KEY replacement via define in vite.config.ts
     this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
     this.tools = tools;
     this.config = config;
@@ -81,8 +105,8 @@ export class GeminiService {
       PROTOCOL:
       - The user is the Owner/Founder.
       - Use the "[Agent Name]" prefix when speaking.
-      - You are autonomous. If the user asks to "run ads", the Marketing agent should use the tool immediately.
-      - Collaborate. Agents can talk to each other.
+      - You can NAVIGATE the UI using 'changeDashboard'. If the user asks to "see sales", use the tool.
+      - You can READ data using 'getRecentItems'. If user asks "what leads do we have?", use the tool first.
     `;
   }
 
@@ -96,14 +120,13 @@ export class GeminiService {
         ],
         config: {
           systemInstruction: this.getSystemInstruction(),
-          tools: [{ functionDeclarations: [createTicketTool, createLeadTool, createCampaignTool] }]
+          tools: [{ functionDeclarations: [createTicketTool, createLeadTool, createCampaignTool, changeDashboardTool, getRecentItemsTool] }]
         }
       });
 
       let finalText = response.text || "";
       const functionCalls = response.functionCalls;
 
-      // Handle Function Calling (Agent Tool Use)
       if (functionCalls && functionCalls.length > 0) {
         let toolOutputs: string[] = [];
         
@@ -117,11 +140,14 @@ export class GeminiService {
              result = this.tools.createLead(args.name as string, args.email as string, args.value as number);
           } else if (name === 'createCampaign' && this.tools.createCampaign) {
              result = this.tools.createCampaign(args.name as string, args.platform as string, args.budget as number);
+          } else if (name === 'changeDashboard' && this.tools.changeDashboard) {
+             result = this.tools.changeDashboard(args.view as string);
+          } else if (name === 'getRecentItems' && this.tools.getRecentItems) {
+             result = await this.tools.getRecentItems(args.type as string);
           }
           toolOutputs.push(`Tool ${name} executed. Result: ${result}`);
         }
         
-        // Feed tool output back to model for final narrative
         const finalResponse = await this.ai.models.generateContent({
           model: this.modelName,
           contents: [
@@ -133,7 +159,6 @@ export class GeminiService {
         finalText = finalResponse.text || "Operations completed.";
       }
 
-      // Trace Logging
       const latency = performance.now() - startTime;
       if (this.logTrace) {
         this.logTrace(message, finalText, latency, 'success');
@@ -192,6 +217,8 @@ export class GeminiService {
                         result = this.tools.createLead(fc.args.name as string, fc.args.email as string, fc.args.value as number);
                    } else if (fc.name === 'createCampaign' && this.tools.createCampaign) {
                         result = this.tools.createCampaign(fc.args.name as string, fc.args.platform as string, fc.args.budget as number);
+                   } else if (fc.name === 'changeDashboard' && this.tools.changeDashboard) {
+                        result = this.tools.changeDashboard(fc.args.view as string);
                    }
                    
                    sessionPromise.then(session => {
@@ -214,8 +241,8 @@ export class GeminiService {
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
         },
-        systemInstruction: this.getSystemInstruction(), // Use dynamic instructions
-        tools: [{ functionDeclarations: [createTicketTool, createLeadTool, createCampaignTool] }],
+        systemInstruction: this.getSystemInstruction(),
+        tools: [{ functionDeclarations: [createTicketTool, createLeadTool, createCampaignTool, changeDashboardTool] }],
         inputAudioTranscription: {},
         outputAudioTranscription: {} 
       }

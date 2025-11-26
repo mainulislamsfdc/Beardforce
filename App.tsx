@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import Sidebar from './components/Sidebar';
 import MeetingRoom from './components/MeetingRoom';
 import SalesView from './components/dashboards/SalesView';
@@ -13,8 +13,7 @@ import { StoreProvider, useStore } from './context/StoreContext';
 import { Loader2 } from 'lucide-react';
 
 const DashboardLayout: React.FC = () => {
-  const { user, config, isLoading } = useStore();
-  const [currentView, setCurrentView] = useState('meeting');
+  const { user, config, isLoading, currentView, navigateTo } = useStore();
 
   if (isLoading) {
     return (
@@ -59,7 +58,7 @@ const DashboardLayout: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-200 font-sans selection:bg-amber-500/30">
-      <Sidebar currentView={currentView} setView={setCurrentView} />
+      <Sidebar currentView={currentView} setView={navigateTo} />
       
       <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
         <header className="h-16 border-b border-slate-800 bg-slate-900/50 flex items-center px-8 justify-between backdrop-blur-md z-10">

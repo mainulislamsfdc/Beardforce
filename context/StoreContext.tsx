@@ -7,9 +7,11 @@ interface StoreContextType {
   user: User | null;
   config: AppConfig | null;
   isLoading: boolean;
+  currentView: string;
   setUser: (u: User | null) => void;
   updateConfig: (c: AppConfig) => Promise<void>;
   resetSystem: () => Promise<void>;
+  navigateTo: (view: string) => void;
 
   // Data
   leads: Lead[];
@@ -37,6 +39,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [user, setUser] = useState<User | null>(null);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentView, setCurrentView] = useState('meeting');
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -50,8 +53,6 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   useEffect(() => {
     const init = async () => {
       setIsLoading(true);
-      
-      // Initialize connection (Firebase or Local)
       await DatabaseService.initialize();
 
       const currentUser = DatabaseService.getCurrentUser();
@@ -87,8 +88,6 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setMetrics(me);
   };
 
-  // Actions
-
   const updateConfig = async (newConfig: AppConfig) => {
     await DatabaseService.saveConfig(newConfig);
     setConfig(newConfig);
@@ -101,6 +100,10 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setLeads([]);
     setCampaigns([]);
     setTickets([]);
+  };
+
+  const navigateTo = (view: string) => {
+      setCurrentView(view);
   };
 
   const addLog = useCallback((action: string, agent: string, level: 'info' | 'warn' | 'error' = 'info') => {
@@ -124,7 +127,6 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setTraces(prev => [newTrace, ...prev]);
       DatabaseService.insert('traces', newTrace);
 
-      // Also record metrics from trace
       const latencyMetric: Metric = {
           id: crypto.randomUUID(),
           name: 'llm_latency',
@@ -172,7 +174,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   return (
     <StoreContext.Provider value={{ 
-        user, config, isLoading, setUser, updateConfig, resetSystem,
+        user, config, isLoading, currentView, setUser, updateConfig, resetSystem, navigateTo,
         leads, campaigns, tickets, expenses, logs, metrics, traces,
         addLead, addTicket, addCampaign, addLog, recordTrace
     }}>

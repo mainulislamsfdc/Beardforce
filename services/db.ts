@@ -1,13 +1,13 @@
 import { AppConfig, User } from "../types";
 
-// Simulating a DB response delay for local mode
+// Helper for local mode delay simulation
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export class DatabaseService {
   private static STORAGE_PREFIX = 'bf_crm_db_';
-  
+
   static async initialize() {
-    console.log("DatabaseService: Initialized in Local Mode");
+    console.log(`DatabaseService: Initialized. Mode: LOCAL`);
   }
 
   // --- Auth ---
@@ -29,16 +29,16 @@ export class DatabaseService {
   }
 
   static async register(email: string, password: string): Promise<User> {
-     // For local mode, register is same as login (auto-create)
+     // Local mode register = login
      return this.login(email, password);
   }
 
   static async logout(): Promise<void> {
-    await delay(200);
     localStorage.removeItem(this.STORAGE_PREFIX + 'user');
   }
 
   static getCurrentUser(): User | null {
+    // For local persistence of session
     const u = localStorage.getItem(this.STORAGE_PREFIX + 'user');
     return u ? JSON.parse(u) : null;
   }
@@ -46,7 +46,6 @@ export class DatabaseService {
   // --- Configuration ---
 
   static async getConfig(): Promise<AppConfig | null> {
-    // Config is stored locally
     const c = localStorage.getItem(this.STORAGE_PREFIX + 'config');
     return c ? JSON.parse(c) : null;
   }
@@ -62,24 +61,24 @@ export class DatabaseService {
 
   // --- Data Operations ---
 
-  static async getTable<T>(table: string): Promise<T[]> {
+  static async getTable<T>(tableName: string): Promise<T[]> {
     await delay(100);
-    const d = localStorage.getItem(this.STORAGE_PREFIX + table);
+    const d = localStorage.getItem(this.STORAGE_PREFIX + tableName);
     return d ? JSON.parse(d) : [];
   }
 
-  static async insert<T>(table: string, item: T): Promise<T> {
+  static async insert<T>(tableName: string, item: any): Promise<T> {
     await delay(200);
-    const current = await this.getTable<T>(table);
+    const current = await this.getTable<T>(tableName);
     const updated = [...current, item];
-    localStorage.setItem(this.STORAGE_PREFIX + table, JSON.stringify(updated));
+    localStorage.setItem(this.STORAGE_PREFIX + tableName, JSON.stringify(updated));
     return item;
   }
 
-  static async update<T extends { id: string }>(table: string, id: string, updates: Partial<T>): Promise<void> {
+  static async update<T extends { id: string }>(tableName: string, id: string, updates: Partial<T>): Promise<void> {
     await delay(200);
-    const current = await this.getTable<T>(table);
+    const current = await this.getTable<T>(tableName);
     const updated = current.map(item => item.id === id ? { ...item, ...updates } : item);
-    localStorage.setItem(this.STORAGE_PREFIX + table, JSON.stringify(updated));
+    localStorage.setItem(this.STORAGE_PREFIX + tableName, JSON.stringify(updated));
   }
 }

@@ -6,7 +6,7 @@ import { AgentRole, ChatMessage } from '../types';
 import { AGENT_COLORS } from '../constants';
 
 const MeetingRoom: React.FC = () => {
-  const { addTicket, addLead, addCampaign, config, recordTrace } = useStore();
+  const { addTicket, addLead, addCampaign, config, recordTrace, navigateTo, leads, tickets, campaigns } = useStore();
   
   // Chat State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -34,13 +34,15 @@ const MeetingRoom: React.FC = () => {
     if (!config) return;
 
     // Initial Message
-    setMessages([{ 
-        id: '0', 
-        role: config.agentNames[AgentRole.IT] || 'IT', 
-        roleType: AgentRole.IT,
-        text: `System Online for ${config.businessName}. All agents ready.`, 
-        timestamp: new Date() 
-    }]);
+    if(messages.length === 0) {
+        setMessages([{ 
+            id: '0', 
+            role: config.agentNames[AgentRole.IT] || 'IT', 
+            roleType: AgentRole.IT,
+            text: `System Online for ${config.businessName}. All agents ready.`, 
+            timestamp: new Date() 
+        }]);
+    }
 
     geminiRef.current = new GeminiService(
       config,
@@ -48,6 +50,16 @@ const MeetingRoom: React.FC = () => {
         createTicket: (t, d, a) => addTicket({ title: t, description: d, assignee: a as any }),
         createLead: (n, e, v) => addLead({ name: n, email: e, value: v }),
         createCampaign: (n, p, b) => addCampaign({ name: n, platform: p as any, budget: b }),
+        changeDashboard: (view) => {
+            navigateTo(view);
+            return `Navigated user to ${view} dashboard.`;
+        },
+        getRecentItems: async (type) => {
+            if(type.includes('lead')) return JSON.stringify(leads.slice(-5));
+            if(type.includes('ticket')) return JSON.stringify(tickets.slice(-5));
+            if(type.includes('campaign')) return JSON.stringify(campaigns.slice(-5));
+            return "No data found.";
+        }
       },
       // Observability Hook
       (input, output, latency, status) => {
@@ -61,7 +73,7 @@ const MeetingRoom: React.FC = () => {
           });
       }
     );
-  }, [config, addTicket, addLead, addCampaign, recordTrace]);
+  }, [config, addTicket, addLead, addCampaign, recordTrace, navigateTo, leads, tickets, campaigns]);
 
   // Auto-scroll chat
   useEffect(() => {
