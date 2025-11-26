@@ -127,7 +127,7 @@ const SetupWizard: React.FC = () => {
                             placeholder='{ "apiKey": "...", "authDomain": "..." }'
                         />
                         {configError && <div className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12}/> {configError}</div>}
-                        <p className="text-[10px] text-slate-500 mt-2">Copy this from Firebase Console > Project Settings > General > Your Apps</p>
+                        <p className="text-[10px] text-slate-500 mt-2">Copy this from Firebase Console {'>'} Project Settings {'>'} General {'>'} Your Apps</p>
                     </div>
                 )}
             </div>
