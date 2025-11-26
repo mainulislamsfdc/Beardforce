@@ -50,6 +50,10 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   useEffect(() => {
     const init = async () => {
       setIsLoading(true);
+      
+      // Initialize connection (Firebase or Local)
+      await DatabaseService.initialize();
+
       const currentUser = DatabaseService.getCurrentUser();
       const currentConfig = await DatabaseService.getConfig();
       

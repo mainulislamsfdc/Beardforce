@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Megaphone, Server, FolderKanban, MessageSquare, Briefcase, LogOut } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Server, FolderKanban, MessageSquare, Briefcase, LogOut, Settings } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { DatabaseService } from '../services/db';
 
@@ -55,13 +55,21 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
         })}
       </nav>
 
-      <div className="p-4 border-t border-slate-800 space-y-4">
-        <div className="flex items-center gap-3 px-2">
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-          <span className="text-xs text-slate-500 font-mono">DB CONNECTED</span>
+      <div className="p-4 border-t border-slate-800 space-y-2">
+        <button 
+           onClick={() => setView('settings')}
+           className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-colors ${currentView === 'settings' ? 'text-amber-500' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+            <Settings size={18} /> <span className="text-sm font-medium">Settings</span>
+        </button>
+
+        <div className="flex items-center gap-3 px-4 py-2">
+          <div className={`w-2 h-2 rounded-full ${config?.firebaseConfig ? 'bg-green-500' : 'bg-blue-500'} animate-pulse`}></div>
+          <span className="text-xs text-slate-500 font-mono">{config?.firebaseConfig ? 'FIREBASE' : 'LOCAL DB'}</span>
         </div>
-        <button onClick={handleLogout} className="flex items-center gap-2 text-xs text-red-400 hover:text-red-300 px-2 transition-colors">
-            <LogOut size={14} /> Sign Out
+        
+        <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-2 text-red-400 hover:bg-slate-800 hover:text-red-300 rounded-lg transition-colors">
+            <LogOut size={18} /> <span className="text-sm font-medium">Sign Out</span>
         </button>
       </div>
     </div>

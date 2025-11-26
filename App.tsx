@@ -7,6 +7,7 @@ import CEOView from './components/dashboards/CEOView';
 import ITView from './components/dashboards/ITView';
 import ProjectBoard from './components/ProjectBoard';
 import SetupWizard from './components/SetupWizard';
+import Settings from './components/Settings';
 import Auth from './components/Auth';
 import { StoreProvider, useStore } from './context/StoreContext';
 import { Loader2 } from 'lucide-react';
@@ -49,6 +50,8 @@ const DashboardLayout: React.FC = () => {
         return <ITView />;
       case 'projects':
         return <ProjectBoard />;
+      case 'settings':
+        return <Settings />;
       default:
         return <MeetingRoom />;
     }

@@ -1,34 +1,23 @@
-import { AppConfig, Campaign, Expense, Lead, SystemLog, Ticket, User, TicketStatus, AgentRole } from "../types";
+import { AppConfig, User } from "../types";
 
-// Simulating a DB response delay
+// Simulating a DB response delay for local mode
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-const DEFAULT_CONFIG: AppConfig = {
-  businessName: "BeardForce CRM",
-  industry: "Men's Grooming",
-  agentNames: {
-    [AgentRole.CEO]: "The Chief",
-    [AgentRole.SALES]: "Sales Lead",
-    [AgentRole.MARKETING]: "Growth Lead",
-    [AgentRole.IT]: "Tech Lead",
-    [AgentRole.USER]: "You"
-  },
-  themeColor: "amber"
-};
-
-// --- DB Service Implementation ---
 
 export class DatabaseService {
   private static STORAGE_PREFIX = 'bf_crm_db_';
+  
+  static async initialize() {
+    console.log("DatabaseService: Initialized in Local Mode");
+  }
 
   // --- Auth ---
 
   static async login(email: string, password: string): Promise<User> {
-    await delay(600); // Simulate network
-    // Mock Auth
+    // Local Mode
+    await delay(600);
     if (email && password) {
       const user: User = {
-        id: 'u_1',
+        id: 'u_local',
         email,
         name: email.split('@')[0],
         role: 'admin'
@@ -37,6 +26,11 @@ export class DatabaseService {
       return user;
     }
     throw new Error("Invalid credentials");
+  }
+
+  static async register(email: string, password: string): Promise<User> {
+     // For local mode, register is same as login (auto-create)
+     return this.login(email, password);
   }
 
   static async logout(): Promise<void> {
@@ -52,49 +46,40 @@ export class DatabaseService {
   // --- Configuration ---
 
   static async getConfig(): Promise<AppConfig | null> {
+    // Config is stored locally
     const c = localStorage.getItem(this.STORAGE_PREFIX + 'config');
     return c ? JSON.parse(c) : null;
   }
 
   static async saveConfig(config: AppConfig): Promise<void> {
-    await delay(300);
     localStorage.setItem(this.STORAGE_PREFIX + 'config', JSON.stringify(config));
   }
 
   static async resetAll(): Promise<void> {
-    await delay(500);
-    // Clear everything except maybe specific system flags if needed
     localStorage.clear();
+    window.location.reload(); 
   }
 
-  // --- Generic Data Operations (Simulating SQL/NoSQL) ---
+  // --- Data Operations ---
 
-  private static getData<T>(table: string): T[] {
+  static async getTable<T>(table: string): Promise<T[]> {
+    await delay(100);
     const d = localStorage.getItem(this.STORAGE_PREFIX + table);
     return d ? JSON.parse(d) : [];
   }
 
-  private static saveData<T>(table: string, data: T[]) {
-    localStorage.setItem(this.STORAGE_PREFIX + table, JSON.stringify(data));
-  }
-
-  static async getTable<T>(table: string): Promise<T[]> {
-    await delay(100); // Fast read
-    return this.getData<T>(table);
-  }
-
   static async insert<T>(table: string, item: T): Promise<T> {
-    await delay(200); // Simulate write latency
-    const current = this.getData<T>(table);
+    await delay(200);
+    const current = await this.getTable<T>(table);
     const updated = [...current, item];
-    this.saveData(table, updated);
+    localStorage.setItem(this.STORAGE_PREFIX + table, JSON.stringify(updated));
     return item;
   }
 
   static async update<T extends { id: string }>(table: string, id: string, updates: Partial<T>): Promise<void> {
     await delay(200);
-    const current = this.getData<T>(table);
+    const current = await this.getTable<T>(table);
     const updated = current.map(item => item.id === id ? { ...item, ...updates } : item);
-    this.saveData(table, updated);
+    localStorage.setItem(this.STORAGE_PREFIX + table, JSON.stringify(updated));
   }
 }

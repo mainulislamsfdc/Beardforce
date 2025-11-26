@@ -14,6 +14,15 @@ export enum TicketStatus {
 
 // --- Configuration & Auth ---
 
+export interface FirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
+}
+
 export interface AppConfig {
   businessName: string;
   industry: string;
@@ -21,6 +30,7 @@ export interface AppConfig {
     [key in AgentRole]?: string;
   };
   themeColor: string;
+  firebaseConfig?: FirebaseConfig;
 }
 
 export interface User {

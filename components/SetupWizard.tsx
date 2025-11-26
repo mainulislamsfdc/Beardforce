@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
 import { useStore } from '../context/StoreContext';
 import { AgentRole, AppConfig } from '../types';
-import { Building2, Users, CheckCircle, Database, Server } from 'lucide-react';
+import { Building2, Users, CheckCircle, Database, Server, AlertCircle } from 'lucide-react';
 
 const SetupWizard: React.FC = () => {
   const { updateConfig } = useStore();
   const [step, setStep] = useState(1);
+  const [useFirebase, setUseFirebase] = useState(false);
+  const [firebaseConfigStr, setFirebaseConfigStr] = useState('');
+  const [configError, setConfigError] = useState('');
+
   const [formData, setFormData] = useState<AppConfig>({
     businessName: '',
     industry: '',
@@ -23,8 +27,19 @@ const SetupWizard: React.FC = () => {
   const handlePrev = () => setStep(s => s - 1);
   
   const handleFinish = async () => {
-    await updateConfig(formData);
-    // Force reload not needed as state updates, but good for cleanup
+    let finalConfig = { ...formData };
+    
+    if (useFirebase && firebaseConfigStr) {
+       try {
+          const fbConfig = JSON.parse(firebaseConfigStr);
+          finalConfig.firebaseConfig = fbConfig;
+       } catch (e) {
+          setConfigError("Invalid JSON configuration");
+          return;
+       }
+    }
+
+    await updateConfig(finalConfig);
   };
 
   return (
@@ -80,18 +95,41 @@ const SetupWizard: React.FC = () => {
               <p className="text-slate-400">Configure your persistent storage.</p>
             </div>
             
-            <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 space-y-4">
+            <div className={`p-6 rounded-xl border transition-all cursor-pointer ${!useFirebase ? 'bg-amber-500/10 border-amber-500' : 'bg-slate-800 border-slate-700'}`} onClick={() => setUseFirebase(false)}>
                 <div className="flex items-start gap-3">
-                    <CheckCircle className="text-green-500 mt-1" size={20} />
+                    <CheckCircle className={!useFirebase ? "text-amber-500 mt-1" : "text-slate-500 mt-1"} size={20} />
                     <div>
-                        <h4 className="font-bold text-slate-200">Browser Persistence (IndexedDB)</h4>
-                        <p className="text-sm text-slate-400">Data is stored securely on this device and survives page reloads.</p>
+                        <h4 className="font-bold text-slate-200">Local Browser Storage</h4>
+                        <p className="text-sm text-slate-400">Quick start. Data stored on this device only.</p>
                     </div>
                 </div>
-                <div className="pt-4 border-t border-slate-700 opacity-50">
-                    <h4 className="font-bold text-slate-200 mb-2 flex items-center gap-2">External Database (Enterprise) <span className="text-[10px] bg-amber-500 text-slate-900 px-2 py-0.5 rounded">COMING SOON</span></h4>
-                    <input disabled placeholder="Postgres / Firebase Connection String" className="w-full bg-slate-900 border border-slate-800 rounded p-2 text-sm cursor-not-allowed"/>
+            </div>
+
+            <div className={`p-6 rounded-xl border transition-all ${useFirebase ? 'bg-amber-500/10 border-amber-500' : 'bg-slate-800 border-slate-700'}`}>
+                <div className="flex items-start gap-3 cursor-pointer" onClick={() => setUseFirebase(true)}>
+                    <CheckCircle className={useFirebase ? "text-amber-500 mt-1" : "text-slate-500 mt-1"} size={20} />
+                    <div>
+                        <h4 className="font-bold text-slate-200">Firebase Cloud Database</h4>
+                        <p className="text-sm text-slate-400">Enterprise grade. Remote access & real-time sync.</p>
+                    </div>
                 </div>
+                
+                {useFirebase && (
+                    <div className="mt-4 animate-fade-in">
+                        <label className="block text-xs font-bold text-slate-400 mb-1">Firebase Config JSON</label>
+                        <textarea 
+                            value={firebaseConfigStr}
+                            onChange={(e) => {
+                                setFirebaseConfigStr(e.target.value);
+                                setConfigError('');
+                            }}
+                            className="w-full h-32 bg-slate-900 border border-slate-600 rounded p-2 text-xs font-mono text-slate-300 focus:border-amber-500 outline-none"
+                            placeholder='{ "apiKey": "...", "authDomain": "..." }'
+                        />
+                        {configError && <div className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12}/> {configError}</div>}
+                        <p className="text-[10px] text-slate-500 mt-2">Copy this from Firebase Console > Project Settings > General > Your Apps</p>
+                    </div>
+                )}
             </div>
           </div>
         )}
@@ -131,7 +169,7 @@ const SetupWizard: React.FC = () => {
             <div className="bg-slate-800 p-4 rounded-lg text-sm text-left max-w-sm mx-auto">
                 <p><span className="text-slate-500">Business:</span> {formData.businessName}</p>
                 <p><span className="text-slate-500">CEO:</span> {formData.agentNames[AgentRole.CEO]}</p>
-                <p><span className="text-slate-500">Database:</span> Local Secure Storage</p>
+                <p><span className="text-slate-500">Database:</span> {useFirebase ? 'Firebase Cloud' : 'Local Secure Storage'}</p>
             </div>
           </div>
         )}
