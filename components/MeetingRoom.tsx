@@ -1,9 +1,43 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, Send, MicOff, User, Loader2, Volume2, Video, VideoOff, PhoneOff, MessageSquare, MonitorUp, AlertCircle } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
-import { GeminiService, createPCMBlob } from '../services/geminiService';
+import { GeminiService } from '../services/geminiService';
 import { AgentRole, ChatMessage } from '../types';
 import { AGENT_COLORS } from '../constants';
+
+// Helper to convert Float32 (Browser Audio) to Int16 (Gemini Requirement)
+function floatTo16BitPCM(input: Float32Array) {
+    const output = new Int16Array(input.length);
+    for (let i = 0; i < input.length; i++) {
+        const s = Math.max(-1, Math.min(1, input[i]));
+        output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    return new Blob([output], { type: 'audio/pcm' });
+}
+
+// Downsampler
+function downsampleBuffer(buffer: Float32Array, inputRate: number, outputRate: number) {
+    if (outputRate === inputRate) {
+        return buffer;
+    }
+    const sampleRateRatio = inputRate / outputRate;
+    const newLength = Math.round(buffer.length / sampleRateRatio);
+    const result = new Float32Array(newLength);
+    let offsetResult = 0;
+    let offsetBuffer = 0;
+    while (offsetResult < result.length) {
+        const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
+        let accum = 0, count = 0;
+        for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+            accum += buffer[i];
+            count++;
+        }
+        result[offsetResult] = accum / count;
+        offsetResult++;
+        offsetBuffer = nextOffsetBuffer;
+    }
+    return result;
+}
 
 const MeetingRoom: React.FC = () => {
   const { addTicket, addLead, addCampaign, addCustomPage, config, recordTrace, navigateTo, leads, tickets, campaigns, customPages } = useStore();
@@ -63,10 +97,8 @@ const MeetingRoom: React.FC = () => {
         },
         deployAppModule: (schema) => {
             try {
-                // Ensure it's parsed if passed as string
                 const pageData = typeof schema === 'string' ? JSON.parse(schema) : schema;
                 const res = addCustomPage(pageData);
-                // Auto navigate to the new page to show user
                 setTimeout(() => navigateTo(pageData.id), 1000);
                 return res;
             } catch (e) {
@@ -74,7 +106,6 @@ const MeetingRoom: React.FC = () => {
             }
         }
       },
-      // Observability Hook
       (input, output, latency, status) => {
           recordTrace({
               requestId: crypto.randomUUID(),
@@ -121,7 +152,6 @@ const MeetingRoom: React.FC = () => {
     setActiveSpeaker(userRoleName);
     setErrorMsg(null);
 
-    // Add user message
     const newMsg: ChatMessage = {
       id: Date.now().toString(),
       role: userRoleName,
@@ -171,13 +201,26 @@ const MeetingRoom: React.FC = () => {
       setErrorMsg(null);
       try {
         if (!geminiRef.current) return;
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1 } });
+        
+        // 1. Get User Media
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         streamRef.current = stream;
+        
+        // 2. Setup Audio Context & Processor
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        audioContextRef.current = audioContext;
+        const inputSampleRate = audioContext.sampleRate;
+        
+        const source = audioContext.createMediaStreamSource(stream);
+        const processor = audioContext.createScriptProcessor(4096, 1, 1);
+        processorRef.current = processor;
+
         setIsLive(true);
         setUserMicOn(true);
         
+        // 3. Connect to Gemini Live
         const sender = await geminiRef.current.connectLive(
-            () => { },
+            () => { }, // Audio data callback (can be used for visualizer)
             (text, isUser) => {
                 if(!config) return;
                 const detected = detectSpeaker(text);
@@ -190,7 +233,7 @@ const MeetingRoom: React.FC = () => {
                     const lastMsg = prev[prev.length - 1];
                     const targetRoleName = isUser ? userRoleName : (detected || config.agentNames[AgentRole.CEO]);
                     const isSameRole = lastMsg && lastMsg.role === targetRoleName;
-                    const isRecent = lastMsg && (new Date().getTime() - lastMsg.timestamp.getTime() < 2000);
+                    const isRecent = lastMsg && (new Date().getTime() - lastMsg.timestamp.getTime() < 3000);
                     
                     if (isSameRole && isRecent) {
                         return prev.map((m, i) => i === prev.length - 1 ? { ...m, text: m.text + " " + text } : m);
@@ -209,23 +252,23 @@ const MeetingRoom: React.FC = () => {
         );
         sendAudioRef.current = sender;
 
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-        audioContextRef.current = audioContext;
-        const source = audioContext.createMediaStreamSource(stream);
-        const processor = audioContext.createScriptProcessor(4096, 1, 1);
-        processorRef.current = processor;
-
+        // 4. Handle Audio Processing (Downsampling)
         processor.onaudioprocess = (e) => {
-             if (!userMicOn) return; 
+             if (!userMicOn || !sendAudioRef.current) return; 
              const inputData = e.inputBuffer.getChannelData(0);
-             const pcmBlob = createPCMBlob(inputData);
-             if (sendAudioRef.current) sendAudioRef.current(pcmBlob);
+             
+             // Downsample to 16kHz
+             const downsampled = downsampleBuffer(inputData, inputSampleRate, 16000);
+             const pcmBlob = floatTo16BitPCM(downsampled);
+             
+             sendAudioRef.current(pcmBlob);
         };
 
         source.connect(processor);
         processor.connect(audioContext.destination);
 
       } catch (err: any) {
+        console.error(err);
         setErrorMsg("Connection Failed. Check permissions.");
         cleanupLiveSession();
       }
@@ -234,8 +277,6 @@ const MeetingRoom: React.FC = () => {
 
   const ParticipantTile = ({ role, name, color }: { role: AgentRole, name: string, color: string }) => {
     const isSpeaking = activeSpeaker === name;
-    
-    // Safety check for dynamic config
     if (!name) return null;
     const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 

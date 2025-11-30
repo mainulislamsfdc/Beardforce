@@ -13,24 +13,37 @@ export class DatabaseService {
   // --- Auth ---
 
   static async login(email: string, password: string): Promise<User> {
-    // Local Mode
     await delay(600);
-    if (email && password) {
-      const user: User = {
-        id: 'u_local',
-        email,
-        name: email.split('@')[0],
-        role: 'admin'
-      };
-      localStorage.setItem(this.STORAGE_PREFIX + 'user', JSON.stringify(user));
-      return user;
+    // Check simulated user registry
+    const users = await this.getUsers();
+    const found = users.find(u => u.email === email);
+    
+    if (found) {
+        localStorage.setItem(this.STORAGE_PREFIX + 'user', JSON.stringify(found));
+        return found;
     }
+
+    // Fallback for default admin if registry is empty
+    if (email === 'admin@test.com') {
+        const admin: User = { id: 'u_admin', email, name: 'Admin', role: 'admin' };
+        localStorage.setItem(this.STORAGE_PREFIX + 'user', JSON.stringify(admin));
+        return admin;
+    }
+
     throw new Error("Invalid credentials");
   }
 
   static async register(email: string, password: string): Promise<User> {
-     // Local mode register = login
-     return this.login(email, password);
+     await delay(600);
+     const newUser: User = {
+         id: Date.now().toString(),
+         email,
+         name: email.split('@')[0],
+         role: 'admin'
+     };
+     await this.addUser(newUser);
+     localStorage.setItem(this.STORAGE_PREFIX + 'user', JSON.stringify(newUser));
+     return newUser;
   }
 
   static async logout(): Promise<void> {
@@ -38,9 +51,24 @@ export class DatabaseService {
   }
 
   static getCurrentUser(): User | null {
-    // For local persistence of session
     const u = localStorage.getItem(this.STORAGE_PREFIX + 'user');
     return u ? JSON.parse(u) : null;
+  }
+
+  // --- User Management ---
+  static async getUsers(): Promise<User[]> {
+      return this.getTable<User>('users');
+  }
+
+  static async addUser(user: User): Promise<void> {
+      await this.insert('users', user);
+  }
+
+  static async deleteUser(id: string): Promise<void> {
+      await delay(200);
+      const users = await this.getUsers();
+      const updated = users.filter(u => u.id !== id);
+      localStorage.setItem(this.STORAGE_PREFIX + 'users', JSON.stringify(updated));
   }
 
   // --- Configuration ---

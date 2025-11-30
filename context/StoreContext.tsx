@@ -19,6 +19,7 @@ interface StoreContextType {
   tickets: Ticket[];
   expenses: Expense[];
   customPages: DynamicPage[];
+  users: User[];
   
   // Observability
   logs: SystemLog[];
@@ -32,6 +33,10 @@ interface StoreContextType {
   addLog: (action: string, agent: string, level?: 'info' | 'warn' | 'error') => void;
   recordTrace: (trace: Omit<Trace, 'id' | 'timestamp'>) => void;
   addCustomPage: (page: DynamicPage) => string;
+  
+  // User Mgmt Actions
+  addNewUser: (email: string, role: 'admin'|'viewer') => Promise<void>;
+  removeUser: (id: string) => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -48,6 +53,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [customPages, setCustomPages] = useState<DynamicPage[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   
   const [logs, setLogs] = useState<SystemLog[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
@@ -74,7 +80,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, []);
 
   const refreshData = async () => {
-    const [l, c, t, e, p, lo, tr, me] = await Promise.all([
+    const [l, c, t, e, p, lo, tr, me, u] = await Promise.all([
       DatabaseService.getTable<Lead>('leads'),
       DatabaseService.getTable<Campaign>('campaigns'),
       DatabaseService.getTable<Ticket>('tickets'),
@@ -83,12 +89,14 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       DatabaseService.getTable<SystemLog>('logs'),
       DatabaseService.getTable<Trace>('traces'),
       DatabaseService.getTable<Metric>('metrics'),
+      DatabaseService.getUsers(),
     ]);
     setLeads(l);
     setCampaigns(c);
     setTickets(t);
     setExpenses(e);
     setCustomPages(p);
+    setUsers(u);
     setLogs(lo.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
     setTraces(tr.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
     setMetrics(me);
@@ -107,6 +115,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setCampaigns([]);
     setTickets([]);
     setCustomPages([]);
+    setUsers([]);
   };
 
   const navigateTo = (view: string) => {
@@ -180,24 +189,39 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, [addLog, config]);
 
   const addCustomPage = useCallback((pageData: DynamicPage) => {
-    // Check if page exists update it, else add
     setCustomPages(prev => {
         const exists = prev.find(p => p.id === pageData.id);
         if (exists) return prev.map(p => p.id === pageData.id ? pageData : p);
         return [...prev, pageData];
     });
-    // For DB, we just overwrite by ID logic conceptually, in reality insert appends so we might duplicate in local storage but last one wins in memory
-    // Better implementation for DB service would be upsert, but insert works for this demo level
     DatabaseService.insert('pages', pageData);
     addLog(`System Module Deployed: ${pageData.name}`, config?.agentNames[AgentRole.IT] || 'IT');
     return `Module ${pageData.name} deployed successfully.`;
   }, [addLog, config]);
 
+  const addNewUser = useCallback(async (email: string, role: 'admin'|'viewer') => {
+      const newUser: User = {
+          id: Date.now().toString(),
+          email,
+          name: email.split('@')[0],
+          role
+      };
+      setUsers(prev => [...prev, newUser]);
+      await DatabaseService.addUser(newUser);
+      addLog(`User Access Granted: ${email}`, 'System');
+  }, [addLog]);
+
+  const removeUser = useCallback(async (id: string) => {
+      setUsers(prev => prev.filter(u => u.id !== id));
+      await DatabaseService.deleteUser(id);
+      addLog(`User Access Revoked: ID ${id}`, 'System');
+  }, [addLog]);
+
   return (
     <StoreContext.Provider value={{ 
         user, config, isLoading, currentView, setUser, updateConfig, resetSystem, navigateTo,
-        leads, campaigns, tickets, expenses, customPages, logs, metrics, traces,
-        addLead, addTicket, addCampaign, addCustomPage, addLog, recordTrace
+        leads, campaigns, tickets, expenses, customPages, logs, metrics, traces, users,
+        addLead, addTicket, addCampaign, addCustomPage, addLog, recordTrace, addNewUser, removeUser
     }}>
       {children}
     </StoreContext.Provider>

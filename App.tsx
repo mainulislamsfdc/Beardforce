@@ -9,6 +9,8 @@ import ProjectBoard from './components/ProjectBoard';
 import SetupWizard from './components/SetupWizard';
 import Settings from './components/Settings';
 import Auth from './components/Auth';
+import UserManagement from './components/UserManagement';
+import IDE from './components/IDE';
 import DynamicPageRenderer from './components/DynamicPageRenderer';
 import { StoreProvider, useStore } from './context/StoreContext';
 import { Loader2 } from 'lucide-react';
@@ -52,6 +54,10 @@ const DashboardLayout: React.FC = () => {
         return <ProjectBoard />;
       case 'settings':
         return <Settings />;
+      case 'users':
+        return <UserManagement />;
+      case 'ide':
+        return <IDE />;
       default:
         // Check for Custom Pages
         const customPage = customPages.find(p => p.id === currentView);
