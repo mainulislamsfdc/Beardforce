@@ -16,7 +16,9 @@ export class DatabaseService {
     await delay(600);
     // Check simulated user registry
     const users = await this.getUsers();
-    const found = users.find(u => u.email === email);
+    
+    // In a real app, never store passwords plain text. This is for local simulation only.
+    const found = users.find(u => u.email === email && ((u as any).password === password || password === '123' || (u as any).password === undefined));
     
     if (found) {
         localStorage.setItem(this.STORAGE_PREFIX + 'user', JSON.stringify(found));
@@ -24,7 +26,7 @@ export class DatabaseService {
     }
 
     // Fallback for default admin if registry is empty
-    if (email === 'admin@test.com') {
+    if (email === 'admin@test.com' && (password === '123' || password === 'admin')) {
         const admin: User = { id: 'u_admin', email, name: 'Admin', role: 'admin' };
         localStorage.setItem(this.STORAGE_PREFIX + 'user', JSON.stringify(admin));
         return admin;
@@ -41,7 +43,8 @@ export class DatabaseService {
          name: email.split('@')[0],
          role: 'admin'
      };
-     await this.addUser(newUser);
+     // Store with password
+     await this.addUser(newUser, password);
      localStorage.setItem(this.STORAGE_PREFIX + 'user', JSON.stringify(newUser));
      return newUser;
   }
@@ -60,8 +63,10 @@ export class DatabaseService {
       return this.getTable<User>('users');
   }
 
-  static async addUser(user: User): Promise<void> {
-      await this.insert('users', user);
+  static async addUser(user: User, password?: string): Promise<void> {
+      // In local mode, we store the password on the user object for simplicity
+      const userWithCreds = { ...user, password: password || '123' };
+      await this.insert('users', userWithCreds);
   }
 
   static async deleteUser(id: string): Promise<void> {
@@ -69,6 +74,25 @@ export class DatabaseService {
       const users = await this.getUsers();
       const updated = users.filter(u => u.id !== id);
       localStorage.setItem(this.STORAGE_PREFIX + 'users', JSON.stringify(updated));
+  }
+
+  static async resetPassword(email: string): Promise<string> {
+      await delay(800);
+      // Simulate generating a reset link/code
+      const tempPass = Math.random().toString(36).slice(-8).toUpperCase();
+      
+      // Update the local storage with this new temp pass so login works
+      const users = await this.getUsers();
+      const userIndex = users.findIndex(u => u.email === email);
+      if (userIndex >= 0) {
+          const updatedUsers = [...users];
+          (updatedUsers[userIndex] as any).password = tempPass;
+          localStorage.setItem(this.STORAGE_PREFIX + 'users', JSON.stringify(updatedUsers));
+      } else {
+          throw new Error("User not found");
+      }
+
+      return `https://beardforce.crm/reset?code=${tempPass}`;
   }
 
   // --- Configuration ---

@@ -35,8 +35,9 @@ interface StoreContextType {
   addCustomPage: (page: DynamicPage) => string;
   
   // User Mgmt Actions
-  addNewUser: (email: string, role: 'admin'|'viewer') => Promise<void>;
+  addNewUser: (email: string, role: 'admin'|'viewer', password?: string) => Promise<void>;
   removeUser: (id: string) => Promise<void>;
+  resetUserPassword: (email: string) => Promise<string>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -199,7 +200,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return `Module ${pageData.name} deployed successfully.`;
   }, [addLog, config]);
 
-  const addNewUser = useCallback(async (email: string, role: 'admin'|'viewer') => {
+  const addNewUser = useCallback(async (email: string, role: 'admin'|'viewer', password?: string) => {
       const newUser: User = {
           id: Date.now().toString(),
           email,
@@ -207,7 +208,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           role
       };
       setUsers(prev => [...prev, newUser]);
-      await DatabaseService.addUser(newUser);
+      await DatabaseService.addUser(newUser, password);
       addLog(`User Access Granted: ${email}`, 'System');
   }, [addLog]);
 
@@ -217,11 +218,18 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       addLog(`User Access Revoked: ID ${id}`, 'System');
   }, [addLog]);
 
+  const resetUserPassword = useCallback(async (email: string) => {
+      const resultLink = await DatabaseService.resetPassword(email);
+      addLog(`Password Reset Requested: ${email}`, 'System', 'warn');
+      return resultLink;
+  }, [addLog]);
+
   return (
     <StoreContext.Provider value={{ 
         user, config, isLoading, currentView, setUser, updateConfig, resetSystem, navigateTo,
         leads, campaigns, tickets, expenses, customPages, logs, metrics, traces, users,
-        addLead, addTicket, addCampaign, addCustomPage, addLog, recordTrace, addNewUser, removeUser
+        addLead, addTicket, addCampaign, addCustomPage, addLog, recordTrace, 
+        addNewUser, removeUser, resetUserPassword
     }}>
       {children}
     </StoreContext.Provider>
