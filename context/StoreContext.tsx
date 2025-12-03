@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
-import { Campaign, Expense, Lead, Ticket, SystemLog, TicketStatus, AgentRole, AppConfig, User, Metric, Trace, DynamicPage } from '../types';
+import { Campaign, Expense, Lead, Ticket, SystemLog, TicketStatus, AgentRole, AppConfig, User, Metric, Trace, DynamicPage, ChangeRequest } from '../types';
 import { DatabaseService } from '../services/db';
 
 interface StoreContextType {
@@ -20,6 +20,7 @@ interface StoreContextType {
   expenses: Expense[];
   customPages: DynamicPage[];
   users: User[];
+  changeRequests: ChangeRequest[];
   
   // Observability
   logs: SystemLog[];
@@ -33,11 +34,16 @@ interface StoreContextType {
   addLog: (action: string, agent: string, level?: 'info' | 'warn' | 'error') => void;
   recordTrace: (trace: Omit<Trace, 'id' | 'timestamp'>) => void;
   addCustomPage: (page: DynamicPage) => string;
+  addChangeRequest: (req: Omit<ChangeRequest, 'id' | 'status' | 'timestamp'>) => string;
+  updateChangeRequestStatus: (id: string, status: ChangeRequest['status']) => void;
   
   // User Mgmt Actions
   addNewUser: (email: string, role: 'admin'|'viewer', password?: string) => Promise<void>;
   removeUser: (id: string) => Promise<void>;
   resetUserPassword: (email: string) => Promise<string>;
+
+  // Generic Action Handler for Forms
+  executeAction: (actionName: string, data: any) => Promise<string>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -55,6 +61,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [customPages, setCustomPages] = useState<DynamicPage[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
   
   const [logs, setLogs] = useState<SystemLog[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
@@ -81,12 +88,13 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, []);
 
   const refreshData = async () => {
-    const [l, c, t, e, p, lo, tr, me, u] = await Promise.all([
+    const [l, c, t, e, p, cr, lo, tr, me, u] = await Promise.all([
       DatabaseService.getTable<Lead>('leads'),
       DatabaseService.getTable<Campaign>('campaigns'),
       DatabaseService.getTable<Ticket>('tickets'),
       DatabaseService.getTable<Expense>('expenses'),
       DatabaseService.getTable<DynamicPage>('pages'),
+      DatabaseService.getTable<ChangeRequest>('change_requests'),
       DatabaseService.getTable<SystemLog>('logs'),
       DatabaseService.getTable<Trace>('traces'),
       DatabaseService.getTable<Metric>('metrics'),
@@ -97,6 +105,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setTickets(t);
     setExpenses(e);
     setCustomPages(p);
+    setChangeRequests(cr);
     setUsers(u);
     setLogs(lo.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
     setTraces(tr.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
@@ -117,6 +126,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setTickets([]);
     setCustomPages([]);
     setUsers([]);
+    setChangeRequests([]);
   };
 
   const navigateTo = (view: string) => {
@@ -200,6 +210,24 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return `Module ${pageData.name} deployed successfully.`;
   }, [addLog, config]);
 
+  const addChangeRequest = useCallback((req: Omit<ChangeRequest, 'id' | 'status' | 'timestamp'>) => {
+      const newReq: ChangeRequest = {
+          ...req,
+          id: Date.now().toString(),
+          status: 'Pending',
+          timestamp: new Date().toISOString()
+      };
+      setChangeRequests(prev => [...prev, newReq]);
+      DatabaseService.insert('change_requests', newReq);
+      addLog(`Change Request Logged: ${req.title}`, 'System');
+      return `Change Request ${newReq.id} logged.`;
+  }, [addLog]);
+
+  const updateChangeRequestStatus = useCallback((id: string, status: ChangeRequest['status']) => {
+      setChangeRequests(prev => prev.map(r => r.id === id ? { ...r, status } : r));
+      DatabaseService.update<ChangeRequest>('change_requests', id, { status });
+  }, []);
+
   const addNewUser = useCallback(async (email: string, role: 'admin'|'viewer', password?: string) => {
       const newUser: User = {
           id: Date.now().toString(),
@@ -224,12 +252,21 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return resultLink;
   }, [addLog]);
 
+  const executeAction = useCallback(async (actionName: string, data: any) => {
+      switch(actionName) {
+          case 'addLead': return addLead(data);
+          case 'addTicket': return addTicket(data);
+          case 'addCampaign': return addCampaign(data);
+          default: return `Unknown action: ${actionName}`;
+      }
+  }, [addLead, addTicket, addCampaign]);
+
   return (
     <StoreContext.Provider value={{ 
         user, config, isLoading, currentView, setUser, updateConfig, resetSystem, navigateTo,
-        leads, campaigns, tickets, expenses, customPages, logs, metrics, traces, users,
-        addLead, addTicket, addCampaign, addCustomPage, addLog, recordTrace, 
-        addNewUser, removeUser, resetUserPassword
+        leads, campaigns, tickets, expenses, customPages, logs, metrics, traces, users, changeRequests,
+        addLead, addTicket, addCampaign, addCustomPage, addLog, recordTrace, addChangeRequest, updateChangeRequestStatus,
+        addNewUser, removeUser, resetUserPassword, executeAction
     }}>
       {children}
     </StoreContext.Provider>

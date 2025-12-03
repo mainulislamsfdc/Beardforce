@@ -80,6 +80,15 @@ export interface Ticket {
   createdAt: string;
 }
 
+export interface ChangeRequest {
+  id: string;
+  title: string;
+  description: string;
+  status: 'Pending' | 'Implemented' | 'Rejected';
+  requestedBy: string;
+  timestamp: string;
+}
+
 export interface Lead {
   id: string;
   name: string;
@@ -119,10 +128,10 @@ export interface ChatMessage {
 
 export interface PageWidget {
   id: string;
-  type: 'statCard' | 'table' | 'chart' | 'header';
+  type: 'statCard' | 'table' | 'chart' | 'header' | 'form';
   title: string;
-  dataSource?: 'leads' | 'tickets' | 'campaigns' | 'expenses'; // Which data store to bind to
-  config?: any; // Flexible config for specific widget types
+  dataSource?: 'leads' | 'tickets' | 'campaigns' | 'expenses' | 'changeRequests'; // Which data store to bind to
+  config?: any; // Flexible config for specific widget types (e.g., form fields, chart types)
   gridColSpan?: number; // 1 (full), 2 (half), 3 (third) - based on 3 col grid
 }
 

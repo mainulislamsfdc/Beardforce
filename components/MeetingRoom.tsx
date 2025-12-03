@@ -40,7 +40,7 @@ function downsampleBuffer(buffer: Float32Array, inputRate: number, outputRate: n
 }
 
 const MeetingRoom: React.FC = () => {
-  const { addTicket, addLead, addCampaign, addCustomPage, config, recordTrace, navigateTo, leads, tickets, campaigns, customPages } = useStore();
+  const { addTicket, addLead, addCampaign, addCustomPage, addChangeRequest, config, recordTrace, navigateTo, leads, tickets, campaigns, customPages, changeRequests } = useStore();
   
   // Chat State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -93,6 +93,7 @@ const MeetingRoom: React.FC = () => {
             if(type.includes('ticket')) return JSON.stringify(tickets.slice(-5));
             if(type.includes('campaign')) return JSON.stringify(campaigns.slice(-5));
             if(type.includes('page')) return JSON.stringify(customPages);
+            if(type.includes('change')) return JSON.stringify(changeRequests.slice(-5));
             return "No data found.";
         },
         deployAppModule: (schema) => {
@@ -104,7 +105,8 @@ const MeetingRoom: React.FC = () => {
             } catch (e) {
                 return "Failed to deploy module: Invalid JSON schema.";
             }
-        }
+        },
+        logChangeRequest: (title, desc) => addChangeRequest({ title, description: desc, requestedBy: 'User' })
       },
       (input, output, latency, status) => {
           recordTrace({
@@ -117,7 +119,7 @@ const MeetingRoom: React.FC = () => {
           });
       }
     );
-  }, [config, addTicket, addLead, addCampaign, addCustomPage, recordTrace, navigateTo, leads, tickets, campaigns, customPages]);
+  }, [config, addTicket, addLead, addCampaign, addCustomPage, addChangeRequest, recordTrace, navigateTo, leads, tickets, campaigns, customPages, changeRequests]);
 
   // Auto-scroll chat
   useEffect(() => {

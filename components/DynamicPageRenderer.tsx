@@ -1,15 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useStore } from '../context/StoreContext';
 import { DynamicPage, PageWidget } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
-import { Box, Layers, List, Table, Activity } from 'lucide-react';
+import { Box, Layers, List, Table, Activity, Send, CheckCircle } from 'lucide-react';
 
 interface DynamicPageRendererProps {
   page: DynamicPage;
 }
 
 const DynamicPageRenderer: React.FC<DynamicPageRendererProps> = ({ page }) => {
-  const { leads, tickets, campaigns, expenses } = useStore();
+  const { leads, tickets, campaigns, expenses, changeRequests, executeAction } = useStore();
 
   const getData = (source?: string) => {
     switch(source) {
@@ -17,6 +17,7 @@ const DynamicPageRenderer: React.FC<DynamicPageRendererProps> = ({ page }) => {
       case 'tickets': return tickets;
       case 'campaigns': return campaigns;
       case 'expenses': return expenses;
+      case 'changeRequests': return changeRequests;
       default: return [];
     }
   };
@@ -38,9 +39,63 @@ const DynamicPageRenderer: React.FC<DynamicPageRendererProps> = ({ page }) => {
       );
     }
 
+    if (widget.type === 'form') {
+        const [formData, setFormData] = useState<any>({});
+        const [status, setStatus] = useState<'idle'|'submitting'|'success'>('idle');
+        const fields = widget.config?.fields || [];
+        const action = widget.config?.action;
+
+        const handleSubmit = async (e: React.FormEvent) => {
+            e.preventDefault();
+            if (!action) return;
+            setStatus('submitting');
+            try {
+                await executeAction(action, formData);
+                setStatus('success');
+                setFormData({});
+                setTimeout(() => setStatus('idle'), 3000);
+            } catch (e) {
+                console.error(e);
+                setStatus('idle');
+            }
+        };
+
+        return (
+            <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 flex flex-col h-full">
+                <h3 className="text-lg font-bold text-slate-200 mb-4 flex items-center gap-2"><Box size={16}/> {widget.title}</h3>
+                <form onSubmit={handleSubmit} className="space-y-4 flex-1">
+                    {fields.map((field: any) => (
+                        <div key={field.name}>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">{field.label}</label>
+                            {field.type === 'select' ? (
+                                <select
+                                    value={formData[field.name] || ''}
+                                    onChange={e => setFormData({...formData, [field.name]: e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200"
+                                >
+                                    <option value="">Select...</option>
+                                    {field.options?.map((opt: string) => <option key={opt} value={opt}>{opt}</option>)}
+                                </select>
+                            ) : (
+                                <input 
+                                    type={field.type || 'text'}
+                                    value={formData[field.name] || ''}
+                                    onChange={e => setFormData({...formData, [field.name]: field.type === 'number' ? Number(e.target.value) : e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-blue-500 outline-none"
+                                />
+                            )}
+                        </div>
+                    ))}
+                    <button disabled={status === 'submitting'} className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded flex items-center justify-center gap-2 mt-4">
+                        {status === 'submitting' ? 'Saving...' : status === 'success' ? <><CheckCircle size={16}/> Saved</> : <><Send size={16}/> Submit Data</>}
+                    </button>
+                </form>
+            </div>
+        );
+    }
+
     if (widget.type === 'statCard') {
-       const value = data.length; // Default to count
-       // If custom config exists to sum a field
+       const value = data.length; 
        const displayValue = widget.config?.field 
           ? data.reduce((acc: number, item: any) => acc + (Number(item[widget.config.field]) || 0), 0)
           : value;
@@ -64,7 +119,6 @@ const DynamicPageRenderer: React.FC<DynamicPageRendererProps> = ({ page }) => {
 
     if (widget.type === 'chart') {
        const chartType = widget.config?.chartType || 'bar';
-       // Simple aggregation logic for demo
        const chartData = data.slice(0, 10).map((item: any) => ({
            name: item.name || item.title || item.description || item.id,
            value: item.value || item.budget || item.amount || 1
@@ -131,7 +185,6 @@ const DynamicPageRenderer: React.FC<DynamicPageRendererProps> = ({ page }) => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-       {/* Header is usually first widget, but we can ensure consistent spacing if needed */}
        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
            {page.widgets.map(widget => (
                <div key={widget.id} className={`${widget.gridColSpan === 3 ? 'col-span-1 md:col-span-2 lg:col-span-3' : widget.gridColSpan === 2 ? 'col-span-1 md:col-span-2' : 'col-span-1'}`}>

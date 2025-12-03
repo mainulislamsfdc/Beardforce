@@ -8,9 +8,9 @@ export interface ToolCalls {
   changeDashboard?: (view: string) => string;
   getRecentItems?: (type: string) => Promise<string>;
   deployAppModule?: (schema: string) => string;
+  logChangeRequest?: (title: string, description: string) => string;
 }
 
-// ... (Tool definitions remain the same, kept for brevity) ...
 const createTicketTool: FunctionDeclaration = {
   name: 'createTicket',
   description: 'Create a new requirement ticket or task in the database.',
@@ -71,7 +71,7 @@ const getRecentItemsTool: FunctionDeclaration = {
     parameters: {
         type: Type.OBJECT,
         properties: {
-            type: { type: Type.STRING, description: "One of: 'leads', 'tickets', 'campaigns', 'pages'" }
+            type: { type: Type.STRING, description: "One of: 'leads', 'tickets', 'campaigns', 'pages', 'changeRequests'" }
         },
         required: ['type']
     }
@@ -79,13 +79,26 @@ const getRecentItemsTool: FunctionDeclaration = {
 
 const deployAppModuleTool: FunctionDeclaration = {
     name: 'deployAppModule',
-    description: 'IT MANAGER ONLY. Deploy a new custom page/module. Schema JSON must follow DynamicPage interface: { id, name, route, description, icon, widgets: [{id, type, title, dataSource, config, gridColSpan}] }.',
+    description: 'IT MANAGER ONLY. Deploy a new custom page/module. Schema JSON must follow DynamicPage interface. To create a FORM, use widget type "form" and config { action: "addLead"|"addTicket", fields: [{name, label, type}] }.',
     parameters: {
         type: Type.OBJECT,
         properties: {
             schema: { type: Type.STRING, description: "Valid JSON string defining the DynamicPage." }
         },
         required: ['schema']
+    }
+};
+
+const logChangeRequestTool: FunctionDeclaration = {
+    name: 'logChangeRequest',
+    description: 'Log a formal Change Request (CR) for the IT Manager to track user requirements before implementation.',
+    parameters: {
+        type: Type.OBJECT,
+        properties: {
+            title: { type: Type.STRING },
+            description: { type: Type.STRING }
+        },
+        required: ['title', 'description']
     }
 };
 
@@ -111,19 +124,17 @@ export class GeminiService {
       You are an elite executive team running "${businessName}", a company in the "${industry}" industry.
       
       THE TEAM (Your Personas):
-      1. IT/Tech: "${agentNames[AgentRole.IT]}". Precise, data-driven, maintains the system. CAN DEPLOY NEW PAGES using 'deployAppModule'. Can navigate to 'ide' to code.
-      2. Sales: "${agentNames[AgentRole.SALES]}". Aggressive, charming, focuses on revenue.
-      3. Marketing: "${agentNames[AgentRole.MARKETING]}". Creative, trendy, focuses on brand.
-      4. CEO: "${agentNames[AgentRole.CEO]}". Strategic, decisive, keeps the team focused.
+      1. IT/Tech: "${agentNames[AgentRole.IT]}". Precise, data-driven. RESPONSIBILITY: Log Change Requests via 'logChangeRequest' BEFORE deploying code. Uses 'deployAppModule' to create pages/forms.
+      2. Sales: "${agentNames[AgentRole.SALES]}". Aggressive, charming.
+      3. Marketing: "${agentNames[AgentRole.MARKETING]}". Creative, trendy.
+      4. CEO: "${agentNames[AgentRole.CEO]}". Strategic, decisive.
       
       PROTOCOL:
       - The user is the Owner/Founder.
       - Use the "[Agent Name]" prefix when speaking.
-      - You can NAVIGATE the UI using 'changeDashboard'.
+      - IT Manager: When asked to build a feature (e.g. "Add Lead Page"), FIRST call 'logChangeRequest', THEN 'deployAppModule' with a 'form' widget.
+      - You can NAVIGATE using 'changeDashboard'.
       - You can READ data using 'getRecentItems'.
-      - If user asks for a new feature/page, the IT Manager should generate a valid JSON schema and call 'deployAppModule'.
-      - If user wants to Manage Users, navigate to 'users'.
-      - If user wants to write code/edit pages manually, navigate to 'ide'.
     `;
   }
 
@@ -137,7 +148,7 @@ export class GeminiService {
         ],
         config: {
           systemInstruction: this.getSystemInstruction(),
-          tools: [{ functionDeclarations: [createTicketTool, createLeadTool, createCampaignTool, changeDashboardTool, getRecentItemsTool, deployAppModuleTool] }]
+          tools: [{ functionDeclarations: [createTicketTool, createLeadTool, createCampaignTool, changeDashboardTool, getRecentItemsTool, deployAppModuleTool, logChangeRequestTool] }]
         }
       });
 
@@ -151,19 +162,14 @@ export class GeminiService {
           const { name, args } = call;
           let result = "Done.";
           
-          if (name === 'createTicket' && this.tools.createTicket) {
-            result = this.tools.createTicket(args.title as string, args.description as string, args.assignee as string);
-          } else if (name === 'createLead' && this.tools.createLead) {
-             result = this.tools.createLead(args.name as string, args.email as string, args.value as number);
-          } else if (name === 'createCampaign' && this.tools.createCampaign) {
-             result = this.tools.createCampaign(args.name as string, args.platform as string, args.budget as number);
-          } else if (name === 'changeDashboard' && this.tools.changeDashboard) {
-             result = this.tools.changeDashboard(args.view as string);
-          } else if (name === 'getRecentItems' && this.tools.getRecentItems) {
-             result = await this.tools.getRecentItems(args.type as string);
-          } else if (name === 'deployAppModule' && this.tools.deployAppModule) {
-             result = this.tools.deployAppModule(args.schema as string);
-          }
+          if (name === 'createTicket' && this.tools.createTicket) result = this.tools.createTicket(args.title as string, args.description as string, args.assignee as string);
+          else if (name === 'createLead' && this.tools.createLead) result = this.tools.createLead(args.name as string, args.email as string, args.value as number);
+          else if (name === 'createCampaign' && this.tools.createCampaign) result = this.tools.createCampaign(args.name as string, args.platform as string, args.budget as number);
+          else if (name === 'changeDashboard' && this.tools.changeDashboard) result = this.tools.changeDashboard(args.view as string);
+          else if (name === 'getRecentItems' && this.tools.getRecentItems) result = await this.tools.getRecentItems(args.type as string);
+          else if (name === 'deployAppModule' && this.tools.deployAppModule) result = this.tools.deployAppModule(args.schema as string);
+          else if (name === 'logChangeRequest' && this.tools.logChangeRequest) result = this.tools.logChangeRequest(args.title as string, args.description as string);
+          
           toolOutputs.push(`Tool ${name} executed. Result: ${result}`);
         }
         
@@ -265,12 +271,12 @@ export class GeminiService {
             if (message.toolCall) {
                 for (const fc of message.toolCall.functionCalls) {
                    let result = "Success";
-                   // ... (Tool Execution Logic matches sendMessage)
                    if (fc.name === 'createTicket' && this.tools.createTicket) result = this.tools.createTicket(fc.args.title as string, fc.args.description as string, fc.args.assignee as string);
                    else if (fc.name === 'createLead' && this.tools.createLead) result = this.tools.createLead(fc.args.name as string, fc.args.email as string, fc.args.value as number);
                    else if (fc.name === 'createCampaign' && this.tools.createCampaign) result = this.tools.createCampaign(fc.args.name as string, fc.args.platform as string, fc.args.budget as number);
                    else if (fc.name === 'changeDashboard' && this.tools.changeDashboard) result = this.tools.changeDashboard(fc.args.view as string);
                    else if (fc.name === 'deployAppModule' && this.tools.deployAppModule) result = this.tools.deployAppModule(fc.args.schema as string);
+                   else if (fc.name === 'logChangeRequest' && this.tools.logChangeRequest) result = this.tools.logChangeRequest(fc.args.title as string, fc.args.description as string);
                    
                    sessionPromise.then(session => {
                        session.sendToolResponse({
@@ -287,14 +293,11 @@ export class GeminiService {
         responseModalities: [Modality.AUDIO],
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
         systemInstruction: this.getSystemInstruction(),
-        tools: [{ functionDeclarations: [createTicketTool, createLeadTool, createCampaignTool, changeDashboardTool, deployAppModuleTool] }],
-        inputAudioTranscription: { model: "google-search" }, // Hack to force validation pass, though empty {} is usually correct, recent SDK might want explicit structure or empty. Reverting to empty object based on known working states.
+        tools: [{ functionDeclarations: [createTicketTool, createLeadTool, createCampaignTool, changeDashboardTool, deployAppModuleTool, logChangeRequestTool] }],
+        inputAudioTranscription: { model: "google-search" }, // Hack to force validation pass
       }
     });
 
-    // Fix: Revert inputAudioTranscription to empty object to avoid invalid argument errors if model field is not supported
-    // The previous error was "Invalid Argument".
-    // Updated config injection:
     (await sessionPromise); // Wait for connection
 
     return async (pcmBlob: Blob) => {
@@ -326,7 +329,6 @@ export class GeminiService {
   }
 
   private async decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: number, numChannels: number): Promise<AudioBuffer> {
-    // Manually create buffer to avoid browser decoding issues with raw PCM
     const dataInt16 = new Int16Array(data.buffer);
     const frameCount = dataInt16.length / numChannels;
     const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
