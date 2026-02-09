@@ -143,3 +143,61 @@ export interface DynamicPage {
   icon: string; // Lucide icon name string
   widgets: PageWidget[];
 }
+
+// --- Access Management ---
+
+export type OrgRole = 'admin' | 'editor' | 'viewer';
+
+export interface Organization {
+  id: string;
+  name: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrgMember {
+  id: string;
+  org_id: string;
+  user_id: string;
+  role: OrgRole;
+  email?: string;
+  invited_by: string | null;
+  joined_at: string;
+}
+
+// --- Code Generation ---
+
+export interface CodeSnippet {
+  id: string;
+  user_id: string;
+  agent_name: string;
+  title: string;
+  description: string;
+  code: string;
+  language: string;
+  component_type: string;
+  created_at: string;
+}
+
+// --- Snapshot / Rollback ---
+
+export interface SystemSnapshot {
+  id: string;
+  user_id: string;
+  label: string;
+  description: string;
+  snapshot_data: Record<string, any>;
+  tables_included: string[];
+  total_rows: number;
+  created_by_agent: string | null;
+  created_at: string;
+}
+
+export interface SystemConfig {
+  id: string;
+  user_id: string;
+  config_key: string;
+  config_value: any;
+  updated_at: string;
+}

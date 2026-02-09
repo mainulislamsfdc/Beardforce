@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { authService } from '../services/auth/authService'
+import { accessControl } from '../services/accessControl'
 
 interface AuthContextType {
   user: User | null
@@ -41,11 +42,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [])
 
+  const handleSignUp = async (email: string, password: string, metadata?: any) => {
+    const data = await authService.signUp(email, password, metadata)
+    // Auto-create organization and make first user admin
+    if (data.user) {
+      try {
+        const orgName = metadata?.company_name || `${email.split('@')[0]}'s Organization`
+        await accessControl.createOrganization(orgName, data.user.id)
+      } catch (err) {
+        // Org creation may fail if user already has one (e.g. email confirmation re-trigger)
+        console.warn('Org creation skipped:', err)
+      }
+    }
+    return data
+  }
+
   const value = {
     user,
     session,
     loading,
-    signUp: authService.signUp,
+    signUp: handleSignUp,
     signIn: authService.signIn,
     signOut: authService.signOut,
     resetPassword: authService.resetPassword

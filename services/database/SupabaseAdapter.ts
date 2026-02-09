@@ -186,15 +186,183 @@ export class SupabaseAdapter extends DatabaseAdapter {
 
   async getTableSchema(table: string): Promise<TableSchema> {
     this.ensureConnected();
-    // This would typically use information_schema or a custom RPC
-    // For now, return a basic structure
-    const { data, error } = await this.client!.rpc('get_table_schema', { table_name: table });
-    
-    if (error) {
-      throw new Error(`GetTableSchema failed: ${error.message}`);
+
+    // Try to get schema from information_schema
+    try {
+      const { data, error } = await this.client!.rpc('get_table_schema', { table_name: table });
+      if (!error && data) {
+        return data as TableSchema;
+      }
+    } catch (e) {
+      // RPC function doesn't exist, use fallback
     }
 
-    return data as TableSchema;
+    // Fallback: Query a single row to infer schema
+    const { data: sampleRow, error: queryError } = await this.client!
+      .from(table)
+      .select('*')
+      .limit(1)
+      .maybeSingle();
+
+    // Define known schemas for common tables
+    const knownSchemas: Record<string, TableSchema> = {
+      leads: {
+        name: 'leads',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true, nullable: false },
+          { name: 'user_id', type: 'uuid', nullable: false },
+          { name: 'name', type: 'text', nullable: false },
+          { name: 'email', type: 'text', nullable: true },
+          { name: 'phone', type: 'text', nullable: true },
+          { name: 'company', type: 'text', nullable: true },
+          { name: 'status', type: 'text', nullable: true, default: 'new' },
+          { name: 'source', type: 'text', nullable: true },
+          { name: 'beard_type', type: 'text', nullable: true },
+          { name: 'interests', type: 'text', nullable: true },
+          { name: 'score', type: 'integer', nullable: true, default: 0 },
+          { name: 'assigned_to', type: 'uuid', nullable: true },
+          { name: 'notes', type: 'text', nullable: true },
+          { name: 'created_at', type: 'timestamp', nullable: true },
+          { name: 'updated_at', type: 'timestamp', nullable: true }
+        ],
+        indexes: []
+      },
+      contacts: {
+        name: 'contacts',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true, nullable: false },
+          { name: 'user_id', type: 'uuid', nullable: false },
+          { name: 'first_name', type: 'text', nullable: false },
+          { name: 'last_name', type: 'text', nullable: false },
+          { name: 'email', type: 'text', nullable: true, unique: true },
+          { name: 'phone', type: 'text', nullable: true },
+          { name: 'account_id', type: 'uuid', nullable: true },
+          { name: 'title', type: 'text', nullable: true },
+          { name: 'tags', type: 'text', nullable: true },
+          { name: 'notes', type: 'text', nullable: true },
+          { name: 'created_at', type: 'timestamp', nullable: true },
+          { name: 'updated_at', type: 'timestamp', nullable: true }
+        ]
+      },
+      accounts: {
+        name: 'accounts',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true, nullable: false },
+          { name: 'user_id', type: 'uuid', nullable: false },
+          { name: 'name', type: 'text', nullable: false },
+          { name: 'industry', type: 'text', nullable: true },
+          { name: 'website', type: 'text', nullable: true },
+          { name: 'phone', type: 'text', nullable: true },
+          { name: 'billing_address', type: 'json', nullable: true },
+          { name: 'shipping_address', type: 'json', nullable: true },
+          { name: 'notes', type: 'text', nullable: true },
+          { name: 'created_at', type: 'timestamp', nullable: true },
+          { name: 'updated_at', type: 'timestamp', nullable: true }
+        ]
+      },
+      opportunities: {
+        name: 'opportunities',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true, nullable: false },
+          { name: 'user_id', type: 'uuid', nullable: false },
+          { name: 'name', type: 'text', nullable: false },
+          { name: 'account_id', type: 'uuid', nullable: true },
+          { name: 'stage', type: 'text', nullable: true, default: 'prospecting' },
+          { name: 'amount', type: 'decimal', nullable: true },
+          { name: 'probability', type: 'integer', nullable: true },
+          { name: 'close_date', type: 'date', nullable: true },
+          { name: 'assigned_to', type: 'uuid', nullable: true },
+          { name: 'notes', type: 'text', nullable: true },
+          { name: 'created_at', type: 'timestamp', nullable: true },
+          { name: 'updated_at', type: 'timestamp', nullable: true }
+        ]
+      },
+      orders: {
+        name: 'orders',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true, nullable: false },
+          { name: 'user_id', type: 'uuid', nullable: false },
+          { name: 'order_number', type: 'text', nullable: false, unique: true },
+          { name: 'account_id', type: 'uuid', nullable: true },
+          { name: 'contact_id', type: 'uuid', nullable: true },
+          { name: 'opportunity_id', type: 'uuid', nullable: true },
+          { name: 'status', type: 'text', nullable: true, default: 'pending' },
+          { name: 'total_amount', type: 'decimal', nullable: true },
+          { name: 'items', type: 'json', nullable: true },
+          { name: 'shipping_address', type: 'json', nullable: true },
+          { name: 'notes', type: 'text', nullable: true },
+          { name: 'created_at', type: 'timestamp', nullable: true },
+          { name: 'updated_at', type: 'timestamp', nullable: true }
+        ]
+      },
+      products: {
+        name: 'products',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true, nullable: false },
+          { name: 'user_id', type: 'uuid', nullable: false },
+          { name: 'name', type: 'text', nullable: false },
+          { name: 'category', type: 'text', nullable: true },
+          { name: 'description', type: 'text', nullable: true },
+          { name: 'price', type: 'decimal', nullable: true },
+          { name: 'stock_quantity', type: 'integer', nullable: true, default: 0 },
+          { name: 'image_url', type: 'text', nullable: true },
+          { name: 'is_active', type: 'boolean', nullable: true, default: true },
+          { name: 'created_at', type: 'timestamp', nullable: true },
+          { name: 'updated_at', type: 'timestamp', nullable: true }
+        ]
+      },
+      change_log: {
+        name: 'change_log',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true, nullable: false },
+          { name: 'user_id', type: 'uuid', nullable: false },
+          { name: 'agent_name', type: 'text', nullable: true },
+          { name: 'change_type', type: 'text', nullable: true },
+          { name: 'description', type: 'text', nullable: false },
+          { name: 'before_state', type: 'json', nullable: true },
+          { name: 'after_state', type: 'json', nullable: true },
+          { name: 'status', type: 'text', nullable: true, default: 'pending' },
+          { name: 'approved_by', type: 'uuid', nullable: true },
+          { name: 'created_at', type: 'timestamp', nullable: true },
+          { name: 'executed_at', type: 'timestamp', nullable: true }
+        ]
+      },
+      ai_budget: {
+        name: 'ai_budget',
+        columns: [
+          { name: 'id', type: 'uuid', primaryKey: true, nullable: false },
+          { name: 'user_id', type: 'uuid', nullable: false },
+          { name: 'month', type: 'text', nullable: false },
+          { name: 'agent_name', type: 'text', nullable: true },
+          { name: 'request_count', type: 'integer', nullable: true, default: 0 },
+          { name: 'tokens_used', type: 'integer', nullable: true, default: 0 },
+          { name: 'estimated_cost', type: 'decimal', nullable: true, default: 0 },
+          { name: 'created_at', type: 'timestamp', nullable: true }
+        ]
+      }
+    };
+
+    // Return known schema if available
+    if (knownSchemas[table]) {
+      return knownSchemas[table];
+    }
+
+    // Last resort: infer from sample row
+    if (sampleRow) {
+      const columns: ColumnDefinition[] = Object.keys(sampleRow).map(key => ({
+        name: key,
+        type: typeof sampleRow[key] === 'number' ? 'integer' : 'text',
+        nullable: true
+      }));
+
+      return {
+        name: table,
+        columns,
+        indexes: []
+      };
+    }
+
+    throw new Error(`Could not determine schema for table: ${table}`);
   }
 
   async createTable(schema: TableSchema): Promise<boolean> {

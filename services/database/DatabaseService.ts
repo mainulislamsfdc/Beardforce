@@ -189,4 +189,157 @@ export class DatabaseService {
 
     return await this.adapter.readAll('ai_budget', filters);
   }
+
+  // ---- Snapshot / Restore System ----
+
+  private readonly SNAPSHOT_TABLES = ['leads', 'contacts', 'accounts', 'opportunities', 'orders', 'products'];
+  private readonly MAX_SNAPSHOTS = 10;
+
+  async createSnapshot(label: string, description: string, createdByAgent?: string): Promise<any> {
+    const snapshotData: Record<string, any> = {};
+    let totalRows = 0;
+
+    for (const table of this.SNAPSHOT_TABLES) {
+      try {
+        const data = await this.adapter.readAll(table, [
+          { column: 'user_id', operator: '=', value: this.getUserId() }
+        ]);
+        const schema = await this.adapter.getTableSchema(table);
+        snapshotData[table] = { schema, data, row_count: data.length };
+        totalRows += data.length;
+      } catch {
+        snapshotData[table] = { schema: null, data: [], row_count: 0 };
+      }
+    }
+
+    // Enforce max snapshots limit
+    const existing = await this.adapter.readAll('system_snapshots', [
+      { column: 'user_id', operator: '=', value: this.getUserId() }
+    ]);
+    if (existing.length >= this.MAX_SNAPSHOTS) {
+      const oldest = existing.sort((a: any, b: any) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      )[0];
+      await this.adapter.delete('system_snapshots', oldest.id);
+    }
+
+    return await this.adapter.create('system_snapshots', {
+      user_id: this.getUserId(),
+      label,
+      description: description || '',
+      snapshot_data: snapshotData,
+      tables_included: this.SNAPSHOT_TABLES,
+      total_rows: totalRows,
+      created_by_agent: createdByAgent || 'admin'
+    });
+  }
+
+  async getSnapshots(): Promise<any[]> {
+    return await this.adapter.readAll('system_snapshots', [
+      { column: 'user_id', operator: '=', value: this.getUserId() }
+    ]);
+  }
+
+  async restoreSnapshot(snapshotId: string): Promise<{ success: boolean; tablesRestored: number; rowsRestored: number }> {
+    const snapshot = await this.adapter.read('system_snapshots', snapshotId);
+    if (!snapshot) throw new Error('Snapshot not found');
+
+    // Auto-backup before restore
+    await this.createSnapshot(
+      `Auto-backup before restore (${snapshot.label})`,
+      `Automatic backup created before restoring: ${snapshot.label}`,
+      'system'
+    );
+
+    const data = snapshot.snapshot_data;
+    let tablesRestored = 0;
+    let rowsRestored = 0;
+
+    for (const table of this.SNAPSHOT_TABLES) {
+      if (data[table]) {
+        // Delete current user data
+        const currentData = await this.adapter.readAll(table, [
+          { column: 'user_id', operator: '=', value: this.getUserId() }
+        ]);
+        for (const row of currentData) {
+          await this.adapter.delete(table, row.id);
+        }
+
+        // Insert snapshot data
+        if (data[table].data && data[table].data.length > 0) {
+          for (const row of data[table].data) {
+            try {
+              await this.adapter.create(table, row);
+            } catch {
+              // Skip rows that fail (e.g., duplicate keys)
+            }
+          }
+          rowsRestored += data[table].data.length;
+        }
+        tablesRestored++;
+      }
+    }
+
+    await this.logChange('admin', 'restore', `Restored snapshot: ${snapshot.label}`, null, {
+      snapshot_id: snapshotId,
+      tables_restored: tablesRestored,
+      rows_restored: rowsRestored
+    });
+
+    return { success: true, tablesRestored, rowsRestored };
+  }
+
+  async deleteSnapshot(snapshotId: string): Promise<boolean> {
+    return await this.adapter.delete('system_snapshots', snapshotId);
+  }
+
+  async resetToDefault(): Promise<void> {
+    // Auto-backup before reset
+    await this.createSnapshot('Pre-reset backup', 'Automatic backup before factory reset', 'system');
+
+    for (const table of this.SNAPSHOT_TABLES) {
+      try {
+        const data = await this.adapter.readAll(table, [
+          { column: 'user_id', operator: '=', value: this.getUserId() }
+        ]);
+        for (const row of data) {
+          await this.adapter.delete(table, row.id);
+        }
+      } catch {
+        // Skip tables that fail
+      }
+    }
+
+    await this.logChange('admin', 'reset', 'System reset to default', null, {
+      tables_cleared: this.SNAPSHOT_TABLES
+    });
+  }
+
+  // System config methods
+  async getConfig(key: string): Promise<any> {
+    const results = await this.adapter.readAll('system_config', [
+      { column: 'user_id', operator: '=', value: this.getUserId() },
+      { column: 'config_key', operator: '=', value: key }
+    ]);
+    return results.length > 0 ? results[0].config_value : null;
+  }
+
+  async setConfig(key: string, value: any): Promise<void> {
+    const existing = await this.adapter.readAll('system_config', [
+      { column: 'user_id', operator: '=', value: this.getUserId() },
+      { column: 'config_key', operator: '=', value: key }
+    ]);
+    if (existing.length > 0) {
+      await this.adapter.update('system_config', existing[0].id, {
+        config_value: value,
+        updated_at: new Date().toISOString()
+      });
+    } else {
+      await this.adapter.create('system_config', {
+        user_id: this.getUserId(),
+        config_key: key,
+        config_value: value
+      });
+    }
+  }
 }
