@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Edit2, Trash2, X, Save, UserPlus, Filter } from 'lucide-react';
 import { databaseService } from '../services/database';
+import { useFieldConfig } from '../context/FieldConfigContext';
 
 interface Lead {
   id?: string;
@@ -17,6 +18,8 @@ interface Lead {
 }
 
 export const LeadManagement: React.FC = () => {
+  const { getFieldConfig } = useFieldConfig();
+  const beardField = getFieldConfig('lead', 'beard_type');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -199,9 +202,9 @@ export const LeadManagement: React.FC = () => {
                     <span className="text-gray-500">Phone:</span>
                     <span className="text-gray-300">{lead.phone || 'N/A'}</span>
                   </div>
-                  {lead.beard_type && (
+                  {beardField.is_visible && lead.beard_type && (
                     <div className="flex items-center gap-2 text-sm">
-                      <span className="text-gray-500">Beard:</span>
+                      <span className="text-gray-500">{beardField.display_name}:</span>
                       <span className="text-gray-300">{lead.beard_type}</span>
                     </div>
                   )}
@@ -319,21 +322,21 @@ export const LeadManagement: React.FC = () => {
                   />
                 </div>
 
+                {beardField.is_visible && (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-300 mb-2">Beard Type</label>
+                  <label className="block text-sm font-semibold text-gray-300 mb-2">{beardField.display_name}</label>
                   <select
                     value={formData.beard_type}
                     onChange={(e) => setFormData({ ...formData, beard_type: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Select...</option>
-                    <option value="full">Full Beard</option>
-                    <option value="goatee">Goatee</option>
-                    <option value="stubble">Stubble</option>
-                    <option value="designer">Designer</option>
-                    <option value="none">None</option>
+                    {(beardField.options || ['Full Beard', 'Goatee', 'Stubble', 'Designer', 'None']).map(opt => (
+                      <option key={opt} value={opt.toLowerCase().replace(/\s+/g, '_')}>{opt}</option>
+                    ))}
                   </select>
                 </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-300 mb-2">Lead Score</label>
@@ -381,3 +384,5 @@ export const LeadManagement: React.FC = () => {
     </div>
   );
 };
+
+export default LeadManagement;

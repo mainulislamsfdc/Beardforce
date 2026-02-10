@@ -201,3 +201,79 @@ export interface SystemConfig {
   config_value: any;
   updated_at: string;
 }
+
+// --- Notifications ---
+
+export interface AppNotification {
+  id: string;
+  user_id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error' | 'agent_action';
+  source: string | null;
+  reference_id: string | null;
+  reference_type: string | null;
+  read: boolean;
+  created_at: string;
+}
+
+export interface ToastNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+}
+
+// --- White-Label / Agent Config ---
+
+export type AgentId = 'ceo' | 'sales' | 'marketing' | 'it';
+
+export interface AgentConfig {
+  id: string;
+  org_id: string;
+  agent_id: AgentId;
+  custom_name: string;
+  custom_title: string;
+  avatar_id: string;
+  color_primary: string;
+  color_gradient: string;
+  personality_prompt: string | null;
+  voice_pitch: number;
+  voice_rate: number;
+  voice_name: string | null;
+  is_active: boolean;
+}
+
+export interface OrgBranding {
+  id: string;
+  org_id: string;
+  app_name: string;
+  tagline: string;
+  accent_color: string;
+  logo_emoji: string;
+  logo_initial: string;
+}
+
+export interface FieldConfig {
+  id: string;
+  org_id: string;
+  entity: string;
+  field_key: string;
+  display_name: string;
+  field_type: 'text' | 'select' | 'number' | 'hidden';
+  options: string[] | null;
+  is_visible: boolean;
+  sort_order: number;
+}
+
+export interface AvatarProps {
+  size: 'sm' | 'md' | 'lg' | 'xl';
+  speaking?: boolean;
+  color?: string;
+}
+
+export interface AvatarDefinition {
+  id: string;
+  name: string;
+  category: 'professional' | 'robot' | 'animal' | 'abstract';
+}

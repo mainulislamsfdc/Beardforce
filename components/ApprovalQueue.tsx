@@ -213,3 +213,5 @@ export const ApprovalQueue: React.FC = () => {
     </div>
   );
 };
+
+export default ApprovalQueue;

@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, TrendingUp, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
-import { salesAgent } from '../services/agents/tools/SalesAgent';
+import { SalesAgent } from '../services/agents/tools/SalesAgent';
 import { databaseService, initializeDatabase } from '../services/database';
 import { useAuth } from '../context/AuthContext';
+import { useAgentConfig } from '../context/AgentConfigContext';
+import { useBranding } from '../context/BrandingContext';
 
 interface Message {
   role: 'user' | 'agent';
@@ -27,6 +29,10 @@ const capabilities = [
 
 export const SalesAgentChat: React.FC = () => {
   const { user } = useAuth();
+  const { getAgent } = useAgentConfig();
+  const { branding } = useBranding();
+  const agentCfg = getAgent('sales');
+  const agentLabel = agentCfg.custom_name + ' Agent';
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -34,6 +40,15 @@ export const SalesAgentChat: React.FC = () => {
   const [showCapabilities, setShowCapabilities] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const agentRef = useRef<SalesAgent | null>(null);
+
+  useEffect(() => {
+    agentRef.current = new SalesAgent({
+      agentName: agentCfg.custom_name,
+      orgName: branding.app_name,
+      personality: agentCfg.personality_prompt || undefined
+    });
+  }, [agentCfg.custom_name, branding.app_name, agentCfg.personality_prompt]);
 
   useEffect(() => {
     const initDB = async () => {
@@ -66,7 +81,8 @@ export const SalesAgentChat: React.FC = () => {
     setInput('');
     setLoading(true);
     try {
-      const response = await salesAgent.chat(input);
+      if (!agentRef.current) agentRef.current = new SalesAgent();
+      const response = await agentRef.current.chat(input);
       setMessages(prev => [...prev, { role: 'agent', content: response, timestamp: new Date() }]);
     } catch (error: any) {
       setMessages(prev => [...prev, { role: 'agent', content: `Error: ${error.message}`, timestamp: new Date() }]);
@@ -98,7 +114,7 @@ export const SalesAgentChat: React.FC = () => {
               <TrendingUp size={24} className="text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-white">Sales Agent</h1>
+              <h1 className="text-lg font-bold text-white">{agentLabel}</h1>
               <p className="text-xs text-gray-400">Pipeline, revenue & lead management</p>
             </div>
           </div>
@@ -136,7 +152,7 @@ export const SalesAgentChat: React.FC = () => {
             <div className="bg-gradient-to-br from-green-500 to-blue-600 p-5 rounded-full mb-4 shadow-xl">
               <TrendingUp size={48} className="text-white" />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">Sales Agent Ready</h2>
+            <h2 className="text-2xl font-bold text-white mb-2">{agentLabel} Ready</h2>
             <p className="text-base text-gray-400 mb-4">Manage leads, pipeline, forecasts, quotes and reports</p>
             <p className="text-sm text-gray-500">Click "Capabilities" above to see all available tools</p>
           </div>
@@ -153,7 +169,7 @@ export const SalesAgentChat: React.FC = () => {
                     {message.role === 'agent' && <TrendingUp className="flex-shrink-0 mt-1 text-green-400" size={20} />}
                     <div className="flex-1">
                       <div className="text-sm font-semibold mb-2 opacity-80">
-                        {message.role === 'user' ? 'You' : 'Sales Agent'}
+                        {message.role === 'user' ? 'You' : agentLabel}
                       </div>
                       <div className="whitespace-pre-wrap leading-relaxed">{message.content}</div>
                     </div>
@@ -171,7 +187,7 @@ export const SalesAgentChat: React.FC = () => {
         <div className="px-4 py-2 bg-green-900 bg-opacity-30 border-t border-green-800">
           <div className="flex items-center gap-3 max-w-5xl mx-auto">
             <Loader2 size={18} className="text-green-400 animate-spin" />
-            <span className="text-sm text-green-300 font-medium">Sales Agent is thinking...</span>
+            <span className="text-sm text-green-300 font-medium">{agentLabel} is thinking...</span>
             <div className="flex gap-1.5 ml-2">
               <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce"></div>
               <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
@@ -208,3 +224,5 @@ export const SalesAgentChat: React.FC = () => {
     </div>
   );
 };
+
+export default SalesAgentChat;

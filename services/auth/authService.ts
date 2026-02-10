@@ -65,5 +65,17 @@ export const authService = {
       password: newPassword
     })
     if (error) throw error
+  },
+
+  // OAuth sign in (Google, GitHub)
+  async signInWithProvider(provider: 'google' | 'github') {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: `${window.location.origin}/dashboard`
+      }
+    })
+    if (error) throw error
+    return data
   }
 }

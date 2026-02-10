@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { Search, ChevronUp, ChevronDown, Database, RefreshCw } from 'lucide-react';
+import { Search, ChevronUp, ChevronDown, Database, RefreshCw, Upload } from 'lucide-react';
 import { databaseService, initializeDatabase } from '../services/database';
 import { useAuth } from '../context/AuthContext';
 import type { TableSchema } from '../services/database/DatabaseAdapter';
+import ExportButton from './ExportButton';
+import ImportModal from './ImportModal';
 
 const VALID_TABLES = ['leads', 'contacts', 'accounts', 'opportunities', 'orders', 'products'];
 const ROWS_PER_PAGE = 20;
@@ -53,6 +55,7 @@ export const DataBrowser: React.FC = () => {
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState(1);
+  const [showImportModal, setShowImportModal] = useState(false);
   const loadingRef = useRef(false);
 
   const loadTableData = useCallback(async () => {
@@ -179,6 +182,18 @@ export const DataBrowser: React.FC = () => {
             />
           </div>
           <button
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg border border-gray-600 transition"
+          >
+            <Upload size={16} />
+            Import
+          </button>
+          <ExportButton
+            tableName={tableName}
+            data={data}
+            columns={visibleColumns.map(c => c.name)}
+          />
+          <button
             onClick={loadTableData}
             className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition"
             title="Refresh"
@@ -187,6 +202,16 @@ export const DataBrowser: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Import Modal */}
+      {showImportModal && schema && (
+        <ImportModal
+          tableName={tableName}
+          tableColumns={schema.columns.map(c => c.name)}
+          onClose={() => setShowImportModal(false)}
+          onImportComplete={() => { setShowImportModal(false); loadTableData(); }}
+        />
+      )}
 
       {/* Error */}
       {error && (
@@ -296,3 +321,5 @@ export const DataBrowser: React.FC = () => {
     </div>
   );
 };
+
+export default DataBrowser;

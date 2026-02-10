@@ -1,7 +1,11 @@
 import { GoogleGenerativeAI, FunctionDeclaration, SchemaType as Type } from '@google/generative-ai';
 import { databaseService } from '../../database';
+import { notificationService } from '../../notificationService';
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+
+// Dynamic config (updated by constructor for per-component instances)
+let _orgName = 'RunwayCRM';
 
 interface ToolDefinition {
   name: string;
@@ -38,6 +42,14 @@ const salesTools: ToolDefinition[] = [
           score: 0,
           notes: notes || null
         });
+
+        try {
+          await notificationService.createNotification(
+            databaseService.getUserId(), 'New Lead Created',
+            `Lead "${name}" added${company ? ` from ${company}` : ''}`,
+            'success', 'Sales', lead.id, 'lead'
+          );
+        } catch {}
 
         return {
           success: true,
@@ -151,6 +163,14 @@ const salesTools: ToolDefinition[] = [
           contact_email: lead.email,
           notes
         });
+
+        try {
+          await notificationService.createNotification(
+            databaseService.getUserId(), 'New Opportunity Created',
+            `"${title}" worth $${amount.toLocaleString()} for ${lead.name}`,
+            'success', 'Sales', opportunity.id, 'opportunity'
+          );
+        } catch {}
 
         return {
           success: true,
@@ -348,11 +368,11 @@ const salesTools: ToolDefinition[] = [
     },
     handler: async ({ recipient_name, email_type, context }) => {
       const templates: Record<string, string> = {
-        introduction: `Subject: Introduction to BeardForce CRM Solutions
+        introduction: `Subject: Introduction to ${_orgName} CRM Solutions
 
 Dear ${recipient_name},
 
-I hope this email finds you well. My name is [Your Name] from BeardForce, and I wanted to reach out to introduce our innovative CRM solutions.
+I hope this email finds you well. My name is [Your Name] from ${_orgName}, and I wanted to reach out to introduce our innovative CRM solutions.
 
 ${context || 'We specialize in helping businesses streamline their customer relationships and sales processes.'}
 
@@ -360,13 +380,13 @@ Would you be available for a brief 15-minute call next week to discuss how we ca
 
 Best regards,
 [Your Name]
-BeardForce Sales Team`,
+${_orgName} Sales Team`,
 
         follow_up: `Subject: Following up on our conversation
 
 Hi ${recipient_name},
 
-Thank you for taking the time to speak with me. I wanted to follow up on our discussion about BeardForce CRM.
+Thank you for taking the time to speak with me. I wanted to follow up on our discussion about ${_orgName} CRM.
 
 ${context || 'As promised, I wanted to share more information about how we can address your specific needs.'}
 
@@ -377,11 +397,11 @@ Looking forward to hearing from you.
 Best regards,
 [Your Name]`,
 
-        proposal: `Subject: Proposal for BeardForce CRM Implementation
+        proposal: `Subject: Proposal for ${_orgName} CRM Implementation
 
 Dear ${recipient_name},
 
-Following our conversations, I'm pleased to present our proposal for implementing BeardForce CRM for your organization.
+Following our conversations, I'm pleased to present our proposal for implementing ${_orgName} CRM for your organization.
 
 ${context || 'Our solution will provide you with comprehensive tools for managing leads, opportunities, and customer relationships.'}
 
@@ -394,7 +414,7 @@ Best regards,
 
 Hi ${recipient_name},
 
-Thank you for choosing BeardForce! We're excited to partner with you.
+Thank you for choosing ${_orgName}! We're excited to partner with you.
 
 ${context || 'Our team is ready to ensure a smooth onboarding process.'}
 
@@ -403,11 +423,11 @@ I'll be your primary point of contact. Please don't hesitate to reach out if you
 Best regards,
 [Your Name]`,
 
-        closing: `Subject: Moving forward with BeardForce
+        closing: `Subject: Moving forward with ${_orgName}
 
 Dear ${recipient_name},
 
-I hope this email finds you well. I wanted to check in regarding our proposal for BeardForce CRM.
+I hope this email finds you well. I wanted to check in regarding our proposal for ${_orgName} CRM.
 
 ${context || 'We believe our solution can provide significant value to your organization.'}
 
@@ -626,15 +646,19 @@ export class SalesAgent {
   private chatSession: any;
   private conversationHistory: any[] = [];
 
-  constructor() {
+  constructor(config?: { agentName?: string; orgName?: string; personality?: string }) {
     if (!GEMINI_API_KEY) {
       throw new Error('VITE_GEMINI_API_KEY is not configured');
     }
 
+    if (config?.orgName) _orgName = config.orgName;
+    const agentName = config?.agentName || 'Sales';
+    const personality = config?.personality ? `\n\nAdditional personality guidance: ${config.personality}` : '';
+
     this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     this.model = this.genAI.getGenerativeModel({
       model: 'gemini-2.0-flash',
-      systemInstruction: `You are the Sales Agent for BeardForce CRM. Your role is to:
+      systemInstruction: `You are the ${agentName} Agent for ${_orgName}. Your role is to:
 
 1. QUALIFY LEADS: Analyze and score leads based on their information
 2. MANAGE PIPELINE: Create and track sales opportunities through the pipeline
@@ -649,7 +673,7 @@ You have access to 10 specialized sales tools. Always use these tools to help us
 
 Be professional, data-driven, and always focus on moving deals forward. When qualifying leads, be thorough. When forecasting, be realistic. When communicating, be persuasive but honest.
 
-Format your responses clearly with headers and bullet points. Always confirm actions taken and provide relevant metrics.`
+Format your responses clearly with headers and bullet points. Always confirm actions taken and provide relevant metrics.${personality}`
     });
   }
 

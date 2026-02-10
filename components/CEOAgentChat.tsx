@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Crown, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
-import { ceoAgent } from '../services/agents/tools/CEOAgent';
+import { CEOAgent } from '../services/agents/tools/CEOAgent';
 import { databaseService, initializeDatabase } from '../services/database';
 import { useAuth } from '../context/AuthContext';
+import { useAgentConfig } from '../context/AgentConfigContext';
+import { useBranding } from '../context/BrandingContext';
 
 interface Message {
   role: 'user' | 'agent';
@@ -25,6 +27,10 @@ const capabilities = [
 
 export const CEOAgentChat: React.FC = () => {
   const { user } = useAuth();
+  const { getAgent } = useAgentConfig();
+  const { branding } = useBranding();
+  const agentCfg = getAgent('ceo');
+  const agentLabel = agentCfg.custom_name + ' Agent';
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -32,6 +38,15 @@ export const CEOAgentChat: React.FC = () => {
   const [showCapabilities, setShowCapabilities] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const agentRef = useRef<CEOAgent | null>(null);
+
+  useEffect(() => {
+    agentRef.current = new CEOAgent({
+      agentName: agentCfg.custom_name,
+      orgName: branding.app_name,
+      personality: agentCfg.personality_prompt || undefined
+    });
+  }, [agentCfg.custom_name, branding.app_name, agentCfg.personality_prompt]);
 
   useEffect(() => {
     const initDB = async () => {
@@ -64,7 +79,8 @@ export const CEOAgentChat: React.FC = () => {
     setInput('');
     setLoading(true);
     try {
-      const response = await ceoAgent.chat(input);
+      if (!agentRef.current) agentRef.current = new CEOAgent();
+      const response = await agentRef.current.chat(input);
       setMessages(prev => [...prev, { role: 'agent', content: response, timestamp: new Date() }]);
     } catch (error: any) {
       setMessages(prev => [...prev, { role: 'agent', content: `Error: ${error.message}`, timestamp: new Date() }]);
@@ -96,7 +112,7 @@ export const CEOAgentChat: React.FC = () => {
               <Crown size={24} className="text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-white">CEO Agent</h1>
+              <h1 className="text-lg font-bold text-white">{agentLabel}</h1>
               <p className="text-xs text-gray-400">Strategy, oversight & coordination</p>
             </div>
           </div>
@@ -134,7 +150,7 @@ export const CEOAgentChat: React.FC = () => {
             <div className="bg-gradient-to-br from-amber-500 via-yellow-500 to-orange-600 p-5 rounded-full mb-4 shadow-xl">
               <Crown size={48} className="text-white" />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">CEO Agent Ready</h2>
+            <h2 className="text-2xl font-bold text-white mb-2">{agentLabel} Ready</h2>
             <p className="text-base text-gray-400 mb-4">Executive dashboards, strategy, budgets and agent coordination</p>
             <p className="text-sm text-gray-500">Click "Capabilities" above to see all available tools</p>
           </div>
@@ -151,7 +167,7 @@ export const CEOAgentChat: React.FC = () => {
                     {message.role === 'agent' && <Crown className="flex-shrink-0 mt-1 text-amber-400" size={20} />}
                     <div className="flex-1">
                       <div className="text-sm font-semibold mb-2 opacity-80">
-                        {message.role === 'user' ? 'You' : 'CEO Agent'}
+                        {message.role === 'user' ? 'You' : agentLabel}
                       </div>
                       <div className="whitespace-pre-wrap leading-relaxed">{message.content}</div>
                     </div>
@@ -169,7 +185,7 @@ export const CEOAgentChat: React.FC = () => {
         <div className="px-4 py-2 bg-amber-900 bg-opacity-30 border-t border-amber-800">
           <div className="flex items-center gap-3 max-w-5xl mx-auto">
             <Loader2 size={18} className="text-amber-400 animate-spin" />
-            <span className="text-sm text-amber-300 font-medium">CEO Agent is thinking...</span>
+            <span className="text-sm text-amber-300 font-medium">{agentLabel} is thinking...</span>
             <div className="flex gap-1.5 ml-2">
               <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce"></div>
               <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
@@ -206,3 +222,5 @@ export const CEOAgentChat: React.FC = () => {
     </div>
   );
 };
+
+export default CEOAgentChat;

@@ -12,16 +12,23 @@ export class ITAgent {
   private tools: ITAgentTools;
   private conversationHistory: Array<{ role: string; parts: Array<{ text: string }> }> = [];
   private modelName = 'gemini-2.0-flash';
+  private agentName: string;
+  private orgName: string;
+  private personality: string;
 
-  constructor(apiKey: string, dbService: DatabaseService) {
+  constructor(apiKey: string, dbService: DatabaseService, config?: { agentName?: string; orgName?: string; personality?: string }) {
     // Use VITE_GEMINI_API_KEY if available, else fall back to provided apiKey
     const key = ((import.meta as any).env.VITE_GEMINI_API_KEY as string) || apiKey;
     this.genAI = new GoogleGenAI({ apiKey: key });
     this.tools = new ITAgentTools(dbService);
+    this.agentName = config?.agentName || 'IT Manager';
+    this.orgName = config?.orgName || 'RunwayCRM';
+    this.personality = config?.personality || '';
   }
 
   private getSystemInstruction(): string {
-    return `You are an expert IT Manager for BeardForce CRM. Your responsibilities:
+    const personalityNote = this.personality ? `\n\nAdditional personality guidance: ${this.personality}` : '';
+    return `You are an expert ${this.agentName} for ${this.orgName}. Your responsibilities:
 - Database schema design and optimization
 - Data integrity and validation
 - Performance monitoring and tuning
@@ -65,7 +72,7 @@ IMPORTANT RULES:
 6. When the user asks to "write code", "create a component", "build a page", or "generate", use generate_component or generate_workflow
 7. Always display generated code in your response so the user can review and copy it
 8. When generating code, follow project conventions: React functional components, TypeScript, Tailwind CSS dark theme (bg-gray-900, bg-gray-800, text-white, border-gray-700)
-9. Before major database changes, suggest creating a restore point first`;
+9. Before major database changes, suggest creating a restore point first${personalityNote}`;
   }
 
   async chat(userMessage: string): Promise<string> {

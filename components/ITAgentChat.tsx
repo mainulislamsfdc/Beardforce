@@ -3,6 +3,8 @@ import { Send, Database, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { ITAgent } from '../services/agents/tools/ITAgent';
 import { databaseService, initializeDatabase } from '../services/database';
 import { useAuth } from '../context/AuthContext';
+import { useAgentConfig } from '../context/AgentConfigContext';
+import { useBranding } from '../context/BrandingContext';
 
 const capabilities = [
   { name: 'Show All Records', command: 'Show all leads', desc: 'View all records from any table' },
@@ -22,15 +24,27 @@ const capabilities = [
 ];
 
 export const ITAgentChat: React.FC = () => {
+  const { getAgent } = useAgentConfig();
+  const agentCfg = getAgent('it');
+  const agentLabel = agentCfg.custom_name + ' Agent';
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'agent'; text: string }>>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [agent] = useState(() => new ITAgent(import.meta.env.VITE_GEMINI_API_KEY, databaseService));
   const [dbInitialized, setDbInitialized] = useState(false);
   const [showCapabilities, setShowCapabilities] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
+  const { branding } = useBranding();
+  const agentRef = useRef<ITAgent | null>(null);
+
+  useEffect(() => {
+    agentRef.current = new ITAgent(import.meta.env.VITE_GEMINI_API_KEY, databaseService, {
+      agentName: agentCfg.custom_name,
+      orgName: branding.app_name,
+      personality: agentCfg.personality_prompt || undefined
+    });
+  }, [agentCfg.custom_name, branding.app_name, agentCfg.personality_prompt]);
 
   useEffect(() => {
     const initDB = async () => {
@@ -64,7 +78,8 @@ export const ITAgentChat: React.FC = () => {
     setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
     setLoading(true);
     try {
-      const response = await agent.chat(userMessage);
+      if (!agentRef.current) agentRef.current = new ITAgent(import.meta.env.VITE_GEMINI_API_KEY, databaseService);
+      const response = await agentRef.current.chat(userMessage);
       setMessages(prev => [...prev, { role: 'agent', text: response }]);
     } catch (error: any) {
       setMessages(prev => [...prev, { role: 'agent', text: `Error: ${error.message}` }]);
@@ -89,7 +104,7 @@ export const ITAgentChat: React.FC = () => {
               <Database size={24} className="text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-white">IT Manager Agent</h1>
+              <h1 className="text-lg font-bold text-white">{agentLabel}</h1>
               <p className="text-xs text-gray-400">Database & infrastructure management</p>
             </div>
           </div>
@@ -127,7 +142,7 @@ export const ITAgentChat: React.FC = () => {
             <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-5 rounded-full inline-block mb-4 shadow-xl">
               <Database size={48} className="text-white" />
             </div>
-            <p className="text-2xl font-bold text-white mb-2">IT Manager Agent Ready</p>
+            <p className="text-2xl font-bold text-white mb-2">{agentLabel} Ready</p>
             <p className="text-base text-gray-400 mb-4">Manage database schemas, create tables, insert records, or analyze performance</p>
             <p className="text-sm text-gray-500">Click "Capabilities" above to see all available tools, or start typing below</p>
           </div>
@@ -144,7 +159,7 @@ export const ITAgentChat: React.FC = () => {
                 {msg.role === 'agent' && <Database className="flex-shrink-0 mt-1 text-blue-400" size={20} />}
                 <div className="flex-1">
                   <p className="text-sm font-semibold mb-2 opacity-80">
-                    {msg.role === 'user' ? 'You' : 'IT Manager'}
+                    {msg.role === 'user' ? 'You' : agentCfg.custom_name}
                   </p>
                   <div className="whitespace-pre-wrap text-sm leading-relaxed">{msg.text}</div>
                 </div>
@@ -161,7 +176,7 @@ export const ITAgentChat: React.FC = () => {
         <div className="px-4 py-2 bg-blue-900 bg-opacity-30 border-t border-blue-800">
           <div className="flex items-center gap-3 max-w-5xl mx-auto">
             <Loader2 size={18} className="text-blue-400 animate-spin" />
-            <span className="text-sm text-blue-300 font-medium">IT Manager is thinking...</span>
+            <span className="text-sm text-blue-300 font-medium">{agentCfg.custom_name} is thinking...</span>
             <div className="flex gap-1.5 ml-2">
               <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></div>
               <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
@@ -180,7 +195,7 @@ export const ITAgentChat: React.FC = () => {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-            placeholder={loading ? 'Please wait...' : 'Ask IT Manager to help with database tasks...'}
+            placeholder={loading ? 'Please wait...' : `Ask ${agentCfg.custom_name} to help with database tasks...`}
             className={`flex-1 px-5 py-3 border border-gray-600 rounded-lg text-base text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-700 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
             disabled={loading}
             autoFocus
@@ -198,3 +213,5 @@ export const ITAgentChat: React.FC = () => {
     </div>
   );
 };
+
+export default ITAgentChat;

@@ -1,7 +1,11 @@
 import { GoogleGenerativeAI, FunctionDeclaration, SchemaType as Type } from '@google/generative-ai';
 import { databaseService } from '../../database';
+import { notificationService } from '../../notificationService';
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+
+// Dynamic config (updated by constructor for per-component instances)
+let _orgName = 'RunwayCRM';
 
 interface ToolDefinition {
   name: string;
@@ -391,6 +395,13 @@ const ceoTools: ToolDefinition[] = [
 
         if (action === 'approve') {
           await databaseService.approveChange(decision_id);
+          try {
+            await notificationService.createNotification(
+              databaseService.getUserId(), 'Decision Approved',
+              `CEO approved: ${change.description}`,
+              'success', 'CEO', decision_id, 'change_log'
+            );
+          } catch {}
           return {
             success: true,
             action: 'approved',
@@ -408,6 +419,13 @@ const ceoTools: ToolDefinition[] = [
             status: 'rejected',
             notes: notes || 'Rejected by CEO'
           });
+          try {
+            await notificationService.createNotification(
+              databaseService.getUserId(), 'Decision Rejected',
+              `CEO rejected: ${change.description}`,
+              'warning', 'CEO', decision_id, 'change_log'
+            );
+          } catch {}
           return {
             success: true,
             action: 'rejected',
@@ -548,7 +566,7 @@ const ceoTools: ToolDefinition[] = [
           generated_at: new Date().toISOString(),
 
           executive_summary: {
-            overview: `${report_type.charAt(0).toUpperCase() + report_type.slice(1)} performance summary for BeardForce CRM`,
+            overview: `${report_type.charAt(0).toUpperCase() + report_type.slice(1)} performance summary for ${_orgName}`,
             key_achievements: [
               `Generated $${revenue} in revenue from ${wonDeals.length} closed deals`,
               `Managed ${leads.length} leads with ${leads.filter(l => l.status === 'qualified').length} qualified`,
@@ -808,15 +826,19 @@ export class CEOAgent {
   private chatSession: any;
   private conversationHistory: any[] = [];
 
-  constructor() {
+  constructor(config?: { agentName?: string; orgName?: string; personality?: string }) {
     if (!GEMINI_API_KEY) {
       throw new Error('VITE_GEMINI_API_KEY is not configured');
     }
 
+    if (config?.orgName) _orgName = config.orgName;
+    const agentName = config?.agentName || 'CEO';
+    const personality = config?.personality ? `\n\nAdditional personality guidance: ${config.personality}` : '';
+
     this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     this.model = this.genAI.getGenerativeModel({
       model: 'gemini-2.0-flash',
-      systemInstruction: `You are the CEO Agent for BeardForce CRM - the executive oversight and coordination system. Your role is to:
+      systemInstruction: `You are the ${agentName} Agent for ${_orgName} - the executive oversight and coordination system. Your role is to:
 
 1. EXECUTIVE OVERSIGHT: Monitor all operations and provide strategic direction
 2. RESOURCE MANAGEMENT: Allocate and optimize budgets, time, and AI resources
@@ -833,7 +855,7 @@ You have access to 10 executive-level tools that provide oversight across the en
 
 Be strategic, data-driven, and forward-thinking. When coordinating between agents, consider dependencies and optimize for overall organizational success. When reviewing decisions, evaluate impact, risk, and alignment with strategic goals.
 
-Format your responses professionally with executive summaries, clear metrics, and actionable recommendations. Always provide context and strategic rationale for your decisions.`
+Format your responses professionally with executive summaries, clear metrics, and actionable recommendations. Always provide context and strategic rationale for your decisions.${personality}`
     });
   }
 

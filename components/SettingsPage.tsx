@@ -1,16 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Users, Shield, RotateCcw, Trash2, Plus, Save, AlertTriangle, Clock, Database, ChevronDown, Download } from 'lucide-react';
+import { Settings, Users, Shield, RotateCcw, Trash2, Plus, Save, AlertTriangle, Clock, Database, ChevronDown, Download, Bot, Palette, SlidersHorizontal } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useOrg } from '../context/OrgContext';
+import { useAgentConfig } from '../context/AgentConfigContext';
 import { accessControl } from '../services/accessControl';
 import { databaseService, initializeDatabase } from '../services/database';
+import AgentSettingsTab from './settings/AgentSettingsTab';
+import BrandingSettingsTab from './settings/BrandingSettingsTab';
+import FieldSettingsTab from './settings/FieldSettingsTab';
 import type { OrgRole, OrgMember } from '../types';
 
-type Tab = 'access' | 'system' | 'rollback';
+type Tab = 'access' | 'agents' | 'branding' | 'fields' | 'system' | 'rollback';
 
 export const SettingsPage: React.FC = () => {
   const { user } = useAuth();
   const { org, role, isAdmin, refresh } = useOrg();
+  const { getAgent } = useAgentConfig();
   const [activeTab, setActiveTab] = useState<Tab>('access');
 
   // Access management state
@@ -200,9 +205,12 @@ export const SettingsPage: React.FC = () => {
   }
 
   const tabs: { id: Tab; label: string; icon: any }[] = [
-    { id: 'access', label: 'Access Management', icon: Users },
+    { id: 'access', label: 'Access', icon: Users },
+    { id: 'agents', label: 'Agents', icon: Bot },
+    { id: 'branding', label: 'Branding', icon: Palette },
+    { id: 'fields', label: 'Fields', icon: SlidersHorizontal },
     { id: 'system', label: 'System', icon: Database },
-    { id: 'rollback', label: 'Reset / Rollback', icon: RotateCcw },
+    { id: 'rollback', label: 'Rollback', icon: RotateCcw },
   ];
 
   return (
@@ -397,6 +405,10 @@ export const SettingsPage: React.FC = () => {
         </div>
       )}
 
+      {activeTab === 'agents' && <AgentSettingsTab />}
+      {activeTab === 'branding' && <BrandingSettingsTab />}
+      {activeTab === 'fields' && <FieldSettingsTab />}
+
       {activeTab === 'system' && (
         <div className="space-y-4">
           {/* Organization info */}
@@ -441,10 +453,10 @@ export const SettingsPage: React.FC = () => {
             <h2 className="text-lg font-semibold text-white mb-3">AI Agents</h2>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { name: 'IT Manager', tools: 20, color: 'text-blue-400' },
-                { name: 'Sales Manager', tools: 12, color: 'text-green-400' },
-                { name: 'Marketing Manager', tools: 10, color: 'text-purple-400' },
-                { name: 'CEO', tools: 10, color: 'text-amber-400' },
+                { name: getAgent('it').custom_name, tools: 20, color: 'text-blue-400' },
+                { name: getAgent('sales').custom_name, tools: 12, color: 'text-green-400' },
+                { name: getAgent('marketing').custom_name, tools: 10, color: 'text-purple-400' },
+                { name: getAgent('ceo').custom_name, tools: 10, color: 'text-amber-400' },
               ].map((agent) => (
                 <div key={agent.name} className="bg-gray-700/50 rounded-lg p-3 flex items-center justify-between">
                   <span className={`text-sm font-medium ${agent.color}`}>{agent.name}</span>
@@ -635,3 +647,5 @@ export const SettingsPage: React.FC = () => {
     </div>
   );
 };
+
+export default SettingsPage;

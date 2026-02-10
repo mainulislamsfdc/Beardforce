@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Megaphone, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
-import { marketingAgent } from '../services/agents/tools/MarketingAgent';
+import { MarketingAgent } from '../services/agents/tools/MarketingAgent';
 import { databaseService, initializeDatabase } from '../services/database';
 import { useAuth } from '../context/AuthContext';
+import { useAgentConfig } from '../context/AgentConfigContext';
+import { useBranding } from '../context/BrandingContext';
 
 interface Message {
   role: 'user' | 'agent';
@@ -15,16 +17,20 @@ const capabilities = [
   { name: 'Segment Audience', command: 'Segment my leads by qualification score', desc: 'Target audiences by criteria' },
   { name: 'Draft Email', command: 'Draft a promotional email for our CRM platform', desc: 'Professional marketing emails' },
   { name: 'Social Media Post', command: 'Schedule a LinkedIn post about our product launch', desc: 'Schedule posts across platforms' },
-  { name: 'Lead Magnet', command: 'Create a lead magnet idea for beard grooming guide', desc: 'Ebooks, guides, templates' },
+  { name: 'Lead Magnet', command: 'Create a lead magnet idea for our product line', desc: 'Ebooks, guides, templates' },
   { name: 'Campaign Analytics', command: 'Analyze the performance of our latest campaign', desc: 'Performance reports & ROI' },
   { name: 'A/B Testing', command: 'Set up an A/B test for our email subject lines', desc: 'Test email subjects & content' },
   { name: 'Landing Page', command: 'Optimize our product landing page', desc: 'Landing page recommendations' },
   { name: 'Content Calendar', command: 'Create a 1-month content calendar for social media', desc: 'Plan content ahead' },
-  { name: 'Google Ads', command: 'Set up a Google Ads campaign for beard products', desc: 'PPC campaign configuration' },
+  { name: 'Google Ads', command: 'Set up a Google Ads campaign for our products', desc: 'PPC campaign configuration' },
 ];
 
 export const MarketingAgentChat: React.FC = () => {
   const { user } = useAuth();
+  const { getAgent } = useAgentConfig();
+  const { branding } = useBranding();
+  const agentCfg = getAgent('marketing');
+  const agentLabel = agentCfg.custom_name + ' Agent';
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -32,6 +38,15 @@ export const MarketingAgentChat: React.FC = () => {
   const [showCapabilities, setShowCapabilities] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const agentRef = useRef<MarketingAgent | null>(null);
+
+  useEffect(() => {
+    agentRef.current = new MarketingAgent({
+      agentName: agentCfg.custom_name,
+      orgName: branding.app_name,
+      personality: agentCfg.personality_prompt || undefined
+    });
+  }, [agentCfg.custom_name, branding.app_name, agentCfg.personality_prompt]);
 
   useEffect(() => {
     const initDB = async () => {
@@ -64,7 +79,8 @@ export const MarketingAgentChat: React.FC = () => {
     setInput('');
     setLoading(true);
     try {
-      const response = await marketingAgent.chat(input);
+      if (!agentRef.current) agentRef.current = new MarketingAgent();
+      const response = await agentRef.current.chat(input);
       setMessages(prev => [...prev, { role: 'agent', content: response, timestamp: new Date() }]);
     } catch (error: any) {
       setMessages(prev => [...prev, { role: 'agent', content: `Error: ${error.message}`, timestamp: new Date() }]);
@@ -96,7 +112,7 @@ export const MarketingAgentChat: React.FC = () => {
               <Megaphone size={24} className="text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-white">Marketing Agent</h1>
+              <h1 className="text-lg font-bold text-white">{agentLabel}</h1>
               <p className="text-xs text-gray-400">Campaigns, content & growth</p>
             </div>
           </div>
@@ -134,7 +150,7 @@ export const MarketingAgentChat: React.FC = () => {
             <div className="bg-gradient-to-br from-purple-500 to-pink-600 p-5 rounded-full mb-4 shadow-xl">
               <Megaphone size={48} className="text-white" />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">Marketing Agent Ready</h2>
+            <h2 className="text-2xl font-bold text-white mb-2">{agentLabel} Ready</h2>
             <p className="text-base text-gray-400 mb-4">Create campaigns, draft emails, plan content and analyze performance</p>
             <p className="text-sm text-gray-500">Click "Capabilities" above to see all available tools</p>
           </div>
@@ -151,7 +167,7 @@ export const MarketingAgentChat: React.FC = () => {
                     {message.role === 'agent' && <Megaphone className="flex-shrink-0 mt-1 text-purple-400" size={20} />}
                     <div className="flex-1">
                       <div className="text-sm font-semibold mb-2 opacity-80">
-                        {message.role === 'user' ? 'You' : 'Marketing Agent'}
+                        {message.role === 'user' ? 'You' : agentLabel}
                       </div>
                       <div className="whitespace-pre-wrap leading-relaxed">{message.content}</div>
                     </div>
@@ -169,7 +185,7 @@ export const MarketingAgentChat: React.FC = () => {
         <div className="px-4 py-2 bg-purple-900 bg-opacity-30 border-t border-purple-800">
           <div className="flex items-center gap-3 max-w-5xl mx-auto">
             <Loader2 size={18} className="text-purple-400 animate-spin" />
-            <span className="text-sm text-purple-300 font-medium">Marketing Agent is thinking...</span>
+            <span className="text-sm text-purple-300 font-medium">{agentLabel} is thinking...</span>
             <div className="flex gap-1.5 ml-2">
               <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce"></div>
               <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
@@ -206,3 +222,5 @@ export const MarketingAgentChat: React.FC = () => {
     </div>
   );
 };
+
+export default MarketingAgentChat;

@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Mic, MicOff, Volume2, VolumeX, TrendingUp, Megaphone, Crown, Zap, MessageCircle } from 'lucide-react';
-import { salesAgent } from '../services/agents/tools/SalesAgent';
-import { marketingAgent } from '../services/agents/tools/MarketingAgent';
-import { ceoAgent } from '../services/agents/tools/CEOAgent';
+import { SalesAgent } from '../services/agents/tools/SalesAgent';
+import { MarketingAgent } from '../services/agents/tools/MarketingAgent';
+import { CEOAgent } from '../services/agents/tools/CEOAgent';
 import { databaseService, initializeDatabase } from '../services/database';
 import { useAuth } from '../context/AuthContext';
+import { useAgentConfig } from '../context/AgentConfigContext';
+import { useBranding } from '../context/BrandingContext';
 
 interface AgentConfig {
   id: string;
@@ -31,6 +33,8 @@ interface Message {
 
 export const VoiceAgentHub: React.FC = () => {
   const { user } = useAuth();
+  const { getAgent } = useAgentConfig();
+  const { branding } = useBranding();
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -42,38 +46,47 @@ export const VoiceAgentHub: React.FC = () => {
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const agents: AgentConfig[] = [
+  const mkCfg = (id: string) => {
+    const c = getAgent(id as any);
+    return { agentName: c.custom_name, orgName: branding.app_name, personality: c.personality_prompt || undefined };
+  };
+
+  const salesCfg = getAgent('sales');
+  const marketingCfg = getAgent('marketing');
+  const ceoCfg = getAgent('ceo');
+
+  const agents = useMemo<AgentConfig[]>(() => [
     {
       id: 'sales',
-      name: 'Sales Manager',
-      title: 'Pipeline & Revenue',
+      name: salesCfg.custom_name,
+      title: salesCfg.custom_title,
       icon: TrendingUp,
       color: 'green',
-      gradient: 'from-green-600 to-blue-700',
-      voiceConfig: { pitch: 1.1, rate: 1.0, volume: 1, voiceName: 'Google US English' },
-      agent: salesAgent
+      gradient: salesCfg.color_gradient || 'from-green-600 to-blue-700',
+      voiceConfig: { pitch: salesCfg.voice_pitch, rate: salesCfg.voice_rate, volume: 1, voiceName: salesCfg.voice_name || 'Google US English' },
+      agent: new SalesAgent(mkCfg('sales'))
     },
     {
       id: 'marketing',
-      name: 'Marketing Manager',
-      title: 'Campaigns & Growth',
+      name: marketingCfg.custom_name,
+      title: marketingCfg.custom_title,
       icon: Megaphone,
       color: 'purple',
-      gradient: 'from-purple-600 to-pink-700',
-      voiceConfig: { pitch: 1.2, rate: 0.95, volume: 1, voiceName: 'Google UK English Female' },
-      agent: marketingAgent
+      gradient: marketingCfg.color_gradient || 'from-purple-600 to-pink-700',
+      voiceConfig: { pitch: marketingCfg.voice_pitch, rate: marketingCfg.voice_rate, volume: 1, voiceName: marketingCfg.voice_name || 'Google UK English Female' },
+      agent: new MarketingAgent(mkCfg('marketing'))
     },
     {
       id: 'ceo',
-      name: 'CEO',
-      title: 'Strategy & Oversight',
+      name: ceoCfg.custom_name,
+      title: ceoCfg.custom_title,
       icon: Crown,
       color: 'amber',
-      gradient: 'from-amber-600 via-yellow-600 to-orange-700',
-      voiceConfig: { pitch: 0.85, rate: 0.9, volume: 1, voiceName: 'Google US English' },
-      agent: ceoAgent
+      gradient: ceoCfg.color_gradient || 'from-amber-600 via-yellow-600 to-orange-700',
+      voiceConfig: { pitch: ceoCfg.voice_pitch, rate: ceoCfg.voice_rate, volume: 1, voiceName: ceoCfg.voice_name || 'Google US English' },
+      agent: new CEOAgent(mkCfg('ceo'))
     }
-  ];
+  ], [salesCfg.custom_name, marketingCfg.custom_name, ceoCfg.custom_name, branding.app_name]);
 
   useEffect(() => {
     const initDB = async () => {
@@ -414,3 +427,5 @@ export const VoiceAgentHub: React.FC = () => {
     </div>
   );
 };
+
+export default VoiceAgentHub;

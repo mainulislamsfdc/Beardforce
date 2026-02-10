@@ -1,16 +1,16 @@
 # AI-Powered Men's Beard Products CRM - Project Assessment & Tracker
 
 ## Project Overview
-**Project Name:** BeardForce - Multi-Agent Autonomous CRM System
-**Domain:** Men's Beard & Grooming Products
-**Status:** 🚀 v2 CORE COMPLETE - Building v3 Production Features
+**Project Name:** RunwayCRM (formerly BeardForce) - Multi-Agent Autonomous CRM System
+**Domain:** Industry-Agnostic (White-Label CRM)
+**Status:** 🚀 v3 Phase 3 COMPLETE - White-Label / Multi-Industry Generalization
 **Repository:** https://github.com/mainulislamsfdc/Beardforce
 **Live Demo:** https://beardforce.vercel.app
 **Technology Stack:** TypeScript, React, Google Gemini API, Vite, Supabase, Web Speech API ✅
 **Developer:** Solo developer with full-stack experience
-**Timeline:** 3 SESSIONS (Feb 7-9) - v1 + v2 core built in 3 days!
+**Timeline:** 5 SESSIONS (Feb 7-10) - v1 + v2 + v3 white-label built in 4 days!
 **Budget:** ₹1000/month (~$12/month) for API calls
-**Last Updated:** February 9, 2026 - v2 Complete, Planning v3
+**Last Updated:** February 10, 2026 - v3 Phase 3 White-Label Complete
 
 ---
 
@@ -56,10 +56,106 @@
 - Marketing Agent: 10 tools
 - CEO Agent: 10 tools
 
-### Current Table Count: 13 Supabase tables
+### Current Table Count: 16 Supabase tables
 - CRM: leads, contacts, accounts, opportunities, orders, products
 - System: change_log, ai_budget, database_connections
 - v2: organizations, org_members, code_snippets, system_snapshots, system_config
+- v3: agent_config, org_branding, field_config
+
+---
+
+## 🏷️ v3 Phase 3 - White-Label / Multi-Industry Generalization (Feb 10, 2026)
+
+**Goal:** Transform the hardcoded "BeardForce CRM" into a fully configurable white-label platform usable by any industry.
+
+### ✅ Session 5 Completed (Feb 10):
+
+**Foundation (Steps 1-2):**
+1. ✅ **New Types** - AgentId, AgentConfig, OrgBranding, FieldConfig, AvatarProps interfaces in types.ts
+2. ✅ **Agent Config Service** - Full CRUD for agent_config, org_branding, field_config tables (services/agentConfigService.ts)
+3. ✅ **AgentConfigContext** - React context providing `getAgent(id)` with hardcoded fallback defaults
+4. ✅ **BrandingContext** - React context providing `branding` (app_name, tagline, colors) with fallback defaults
+5. ✅ **FieldConfigContext** - React context providing `getFieldConfig(entity, key)` with fallback defaults
+6. ✅ **Provider Wiring** - App.tsx wraps with 3 new providers (AuthProvider > OrgProvider > AgentConfigProvider > BrandingProvider > FieldConfigProvider > NotificationProvider > Router)
+
+**Avatar System (Step 3):**
+7. ✅ **20 SVG Avatars** - Inline React SVG components in 4 categories: Professional (5), Robot (5), Animal (5), Abstract (5)
+8. ✅ **AvatarRenderer** - Renders avatar by ID with size/speaking/color props, fallback to colored initials circle
+9. ✅ **AvatarPickerModal** - Category-tabbed grid picker modal for selecting agent avatars
+10. ✅ **Speaking Animation** - CSS @keyframes for mouth animation during voice/meeting mode
+
+**Settings UI (Steps 4-5):**
+11. ✅ **Agent Settings Tab** - 4 agent cards with editable: custom name, title, avatar (picker), primary color, gradient, voice pitch/rate/name, personality prompt, active toggle
+12. ✅ **Branding Settings Tab** - Editable: app name, tagline, accent color (preset palette), logo initial, logo emoji
+13. ✅ **SettingsPage** - 3 new tabs added: "Agents", "Branding", "Fields" (alongside existing Access, System, Rollback)
+
+**Layout & Branding Wiring (Step 6):**
+14. ✅ **Dynamic Layout** - Sidebar header shows dynamic app name + logo from useBranding(), agent nav items use config names
+15. ✅ **Generic index.html** - Title set to "CRM", dynamically updated via document.title in Layout
+16. ✅ **Generic PrivateRoute** - Loading text says "Loading..." instead of "Loading BeardForce..."
+
+**Agent Config Wiring (Step 7):**
+17. ✅ **DashboardPage** - Agent cards use useAgentConfig() for names/titles + AvatarRenderer for avatars
+18. ✅ **4 Agent Chat Pages** - Dynamic agent names, gradient colors, and avatar icons from config
+
+**Dynamic System Prompts (Step 8):**
+19. ✅ **CEO/Sales/Marketing Agents** - Constructor accepts `{ agentName, orgName, personality }` config, module-level `_orgName` for tool handler access
+20. ✅ **IT Agent** - Instance fields for config (different SDK pattern), `getSystemInstruction()` uses dynamic names
+21. ✅ **All "BeardForce" Replaced** - Email templates, ad copy, hashtags, campaign names all use dynamic `${_orgName}`
+22. ✅ **Personality Injection** - Optional personality prompt appended to all agent system instructions
+23. ✅ **Chat Components** - useRef + useEffect pattern creates per-component agent instances that recreate on config change
+
+**Meeting & Voice (Step 9):**
+24. ✅ **MeetingOrchestrator** - `buildAgentParticipants()` factory, dynamic agent instances via `initialize(db, configs, orgName)`
+25. ✅ **TeamsMeetingRoom** - Uses useAgentConfig() for participant data, passes configs to orchestrator
+26. ✅ **VoiceAgentHub** - useMemo-based dynamic agents array with config names, titles, gradients, voice settings
+
+**Field Customization (Step 10):**
+27. ✅ **FieldSettingsTab** - Rename/hide lead fields, customize dropdown options (e.g., rename "Beard Type" to "Product Category")
+28. ✅ **LeadManagement** - beard_type field visibility controlled by useFieldConfig(), dynamic label and options
+
+### New Files Created (11):
+| File | Purpose |
+|------|---------|
+| `services/agentConfigService.ts` | CRUD for agent_config, org_branding, field_config |
+| `context/AgentConfigContext.tsx` | Agent config provider with fallback defaults |
+| `context/BrandingContext.tsx` | Branding provider with fallback defaults |
+| `context/FieldConfigContext.tsx` | Field config provider with fallback defaults |
+| `components/avatars/index.tsx` | 20 inline SVG avatar components + registry |
+| `components/avatars/AvatarRenderer.tsx` | Avatar renderer with fallback initials |
+| `components/avatars/AvatarPickerModal.tsx` | Category-tabbed avatar picker modal |
+| `components/settings/AgentSettingsTab.tsx` | Agent name/title/avatar/color/voice/personality settings |
+| `components/settings/BrandingSettingsTab.tsx` | App name/tagline/color/logo settings |
+| `components/settings/FieldSettingsTab.tsx` | Lead field rename/hide/options customization |
+
+### Files Modified (16+):
+| File | Changes |
+|------|---------|
+| `types.ts` | Added AgentId, AgentConfig, OrgBranding, FieldConfig, AvatarProps |
+| `App.tsx` | Wrapped with 3 new context providers |
+| `index.html` | Generic title, speaking animation CSS |
+| `Layout.tsx` | Dynamic app name, agent nav labels from config |
+| `DashboardPage.tsx` | Agent cards use config + AvatarRenderer |
+| `SettingsPage.tsx` | 3 new tabs: Agents, Branding, Fields |
+| `CEOAgentChat.tsx` | Dynamic name/gradient, config-based agent instance |
+| `SalesAgentChat.tsx` | Dynamic name/gradient, config-based agent instance |
+| `MarketingAgentChat.tsx` | Dynamic name/gradient, config-based agent instance |
+| `ITAgentChat.tsx` | Dynamic name/gradient, config-based agent instance |
+| `CEOAgent.ts` | Config constructor, dynamic system prompt + templates |
+| `SalesAgent.ts` | Config constructor, dynamic email templates |
+| `MarketingAgent.ts` | Config constructor, dynamic email/ad templates |
+| `ITAgent.ts` | Config constructor, dynamic system instruction |
+| `MeetingOrchestrator.ts` | buildAgentParticipants() factory, dynamic init |
+| `TeamsMeetingRoom.tsx` | Dynamic participants from config |
+| `VoiceAgentHub.tsx` | useMemo agents with config names/voice settings |
+| `LeadManagement.tsx` | Field visibility/label/options from FieldConfigContext |
+
+### Key Architecture Decisions:
+1. **Fallback defaults everywhere** — All contexts return current hardcoded values if DB has no rows. Zero breakage for existing users.
+2. **Module-level `_orgName`** — CEO/Sales/Marketing agents store org name at module level so tool handlers (defined outside class) can reference it in email/ad templates.
+3. **Per-component agent instances** — Chat components use `useRef` + `useEffect` to create agents that recreate when config changes, replacing module-level singletons.
+4. **SVG avatars as React components** — No external images/CDNs. Each avatar is an inline SVG with `speaking` prop for mouth animation.
+5. **beard_type column stays in DB** — Only the display is configurable (label, options, visibility). No schema migration needed on leads table.
 
 ---
 

@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
-import { Database, TrendingUp, Megaphone, Crown, Users, CheckSquare, Mic, LogOut, LayoutDashboard, PanelLeftClose, PanelLeftOpen, Settings, Table2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Database, TrendingUp, Megaphone, Crown, Users, CheckSquare, Mic, LogOut, LayoutDashboard, PanelLeftClose, PanelLeftOpen, Settings, Table2, ChevronDown, ChevronRight, Shield, GitBranch, Video, Code2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useOrg } from '../context/OrgContext';
+import { useBranding } from '../context/BrandingContext';
+import { useAgentConfig } from '../context/AgentConfigContext';
+import NotificationBell from './NotificationBell';
 
 export const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -11,6 +14,8 @@ export const Layout: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { role, isAdmin } = useOrg();
+  const { branding } = useBranding();
+  const { getAgent } = useAgentConfig();
 
   const handleSignOut = async () => {
     navigate('/login');
@@ -21,7 +26,11 @@ export const Layout: React.FC = () => {
   const managementItems = [
     { path: '/leads', label: 'Lead Management', icon: Users },
     { path: '/approvals', label: 'Approval Queue', icon: CheckSquare },
+    { path: '/workflows', label: 'Workflows', icon: GitBranch },
+    { path: '/meeting', label: 'Teams Meeting', icon: Video },
     { path: '/voice', label: 'Voice Interface', icon: Mic },
+    { path: '/code-editor', label: 'Code Editor', icon: Code2 },
+    { path: '/audit', label: 'Audit Trail', icon: Shield },
     ...(isAdmin ? [{ path: '/settings', label: 'Settings', icon: Settings }] : []),
   ];
 
@@ -30,10 +39,10 @@ export const Layout: React.FC = () => {
       { path: '/dashboard', label: 'Meeting Room', icon: LayoutDashboard }
     ]},
     { section: 'Agents', items: [
-      { path: '/it-agent', label: 'IT Manager', icon: Database },
-      { path: '/sales-agent', label: 'Sales Manager', icon: TrendingUp },
-      { path: '/marketing-agent', label: 'Marketing', icon: Megaphone },
-      { path: '/ceo-agent', label: 'CEO', icon: Crown }
+      { path: '/it-agent', label: getAgent('it').custom_name, icon: Database },
+      { path: '/sales-agent', label: getAgent('sales').custom_name, icon: TrendingUp },
+      { path: '/marketing-agent', label: getAgent('marketing').custom_name, icon: Megaphone },
+      { path: '/ceo-agent', label: getAgent('ceo').custom_name, icon: Crown }
     ]},
     { section: 'Management', items: managementItems },
     { section: 'Database', items: [
@@ -57,10 +66,10 @@ export const Layout: React.FC = () => {
         {/* Logo */}
         <div className="p-4 border-b border-gray-700 flex items-center justify-between min-w-[240px]">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-              B
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: branding.accent_color || '#f97316' }}>
+              {branding.logo_initial || 'R'}
             </div>
-            <span className="text-white font-semibold">BeardForce CRM</span>
+            <span className="text-white font-semibold">{branding.app_name || 'RunwayCRM'}</span>
           </div>
         </div>
 
@@ -148,7 +157,10 @@ export const Layout: React.FC = () => {
           </button>
           <div className="text-gray-400 text-sm">
             {navItems.flatMap(g => g.items).find(i => location.pathname === i.path || location.pathname.startsWith(i.path + '/'))?.label
-              || (location.pathname.startsWith('/database/') ? location.pathname.split('/')[2]?.charAt(0).toUpperCase() + location.pathname.split('/')[2]?.slice(1) + ' Database' : 'BeardForce CRM')}
+              || (location.pathname.startsWith('/database/') ? location.pathname.split('/')[2]?.charAt(0).toUpperCase() + location.pathname.split('/')[2]?.slice(1) + ' Database' : branding.app_name || 'RunwayCRM')}
+          </div>
+          <div className="ml-auto">
+            <NotificationBell />
           </div>
         </div>
 

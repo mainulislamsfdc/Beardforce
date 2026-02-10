@@ -3,6 +3,9 @@ import { databaseService } from '../../database';
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
+// Dynamic config (updated by constructor for per-component instances)
+let _orgName = 'RunwayCRM';
+
 interface ToolDefinition {
   name: string;
   description: string;
@@ -121,7 +124,7 @@ This month's highlights:
 ${call_to_action || 'Read the full newsletter →'}
 
 Best regards,
-The BeardForce Team
+The ${_orgName} Team
 
 P.S. You're receiving this because you're a valued member of our community.`,
 
@@ -143,7 +146,7 @@ ${call_to_action || 'Claim Your Offer Now →'}
 Don't miss out - offer ends soon!
 
 Cheers,
-The BeardForce Team`,
+The ${_orgName} Team`,
 
         announcement: `Subject: ${subject_line}
 
@@ -163,7 +166,7 @@ ${call_to_action || 'Learn More →'}
 Thank you for being part of our journey!
 
 Best,
-The BeardForce Team`,
+The ${_orgName} Team`,
 
         nurture: `Subject: ${subject_line}
 
@@ -173,7 +176,7 @@ ${key_message}
 
 We understand that choosing the right CRM solution is an important decision. That's why we want to provide you with all the information you need.
 
-Here's what makes BeardForce different:
+Here's what makes ${_orgName} different:
 • AI-powered agents that work for you
 • Intuitive interface
 • Comprehensive features
@@ -183,7 +186,7 @@ ${call_to_action || 'Schedule a Demo →'}
 Have questions? Just reply to this email.
 
 Warm regards,
-The BeardForce Team`,
+The ${_orgName} Team`,
 
         event_invite: `Subject: ${subject_line}
 
@@ -203,7 +206,7 @@ ${call_to_action || 'Register Now →'}
 We'd love to see you there!
 
 Best wishes,
-The BeardForce Team`
+The ${_orgName} Team`
       };
 
       return {
@@ -237,7 +240,7 @@ The BeardForce Team`
             optimizedContent = content.substring(0, 277) + '...';
           }
           if (platform === 'linkedin') {
-            optimizedContent += '\n\n#BeardForce #CRM #SalesAutomation';
+            optimizedContent += '\n\n#${_orgName} #CRM #SalesAutomation';
           }
           if (platform === 'instagram' && !image_url) {
             return { platform, warning: 'Instagram posts typically require an image' };
@@ -635,11 +638,11 @@ The BeardForce Team`
           match_types: ['Exact', 'Phrase', 'Broad Match Modified'],
           suggested_bid: avgCPC,
           ad_copy: {
-            headline_1: `Best ${groupName} | BeardForce`,
+            headline_1: `Best ${groupName} | ${_orgName}`,
             headline_2: 'AI-Powered CRM Platform',
             headline_3: 'Start Free Trial Today',
             description_1: 'Transform your sales with AI agents. Automate lead management, forecasting, and more.',
-            description_2: 'Join 1000+ companies using BeardForce. Free setup, no credit card required.',
+            description_2: 'Join 1000+ companies using ${_orgName}. Free setup, no credit card required.',
             path_1: groupName.toLowerCase().replace(/\s+/g, '-'),
             path_2: 'free-trial'
           }
@@ -649,7 +652,7 @@ The BeardForce Team`
       return {
         success: true,
         campaign: {
-          name: `BeardForce - ${campaign_objective}`,
+          name: `${_orgName} - ${campaign_objective}`,
           objective: campaign_objective,
           daily_budget,
           monthly_budget: daily_budget * 30,
@@ -732,15 +735,19 @@ export class MarketingAgent {
   private chatSession: any;
   private conversationHistory: any[] = [];
 
-  constructor() {
+  constructor(config?: { agentName?: string; orgName?: string; personality?: string }) {
     if (!GEMINI_API_KEY) {
       throw new Error('VITE_GEMINI_API_KEY is not configured');
     }
 
+    if (config?.orgName) _orgName = config.orgName;
+    const agentName = config?.agentName || 'Marketing';
+    const personality = config?.personality ? `\n\nAdditional personality guidance: ${config.personality}` : '';
+
     this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     this.model = this.genAI.getGenerativeModel({
       model: 'gemini-2.0-flash',
-      systemInstruction: `You are the Marketing Agent for BeardForce CRM. Your role is to:
+      systemInstruction: `You are the ${agentName} Agent for ${_orgName}. Your role is to:
 
 1. CAMPAIGN MANAGEMENT: Create and optimize marketing campaigns across channels
 2. AUDIENCE TARGETING: Segment audiences for personalized marketing
@@ -757,7 +764,7 @@ You have access to 10 specialized marketing tools. Use data-driven insights and 
 
 Be creative, strategic, and always focus on measurable results. When creating campaigns, be comprehensive. When analyzing performance, be honest about what's working and what needs improvement.
 
-Format your responses with clear sections, bullet points, and actionable recommendations. Include relevant metrics and projections.`
+Format your responses with clear sections, bullet points, and actionable recommendations. Include relevant metrics and projections.${personality}`
     });
   }
 
