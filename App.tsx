@@ -6,9 +6,13 @@ import { NotificationProvider } from './context/NotificationContext';
 import { AgentConfigProvider } from './context/AgentConfigContext';
 import { BrandingProvider } from './context/BrandingContext';
 import { FieldConfigProvider } from './context/FieldConfigContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import ToastContainer from './components/ToastContainer';
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
+import LandingPage from './components/LandingPage';
+import TermsPage from './components/TermsPage';
+import PrivacyPage from './components/PrivacyPage';
 import { PrivateRoute } from './components/PrivateRoute';
 import { Layout } from './components/Layout';
 
@@ -46,12 +50,20 @@ function App() {
         <Router>
           <Suspense fallback={<LoadingSpinner />}>
             <Routes>
+              {/* ── Public routes ───────────────────────────────── */}
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/terms" element={<TermsPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
 
-              {/* All authenticated routes share the Layout with sidebar */}
+              {/* ── Authenticated routes (Layout with sidebar) ── */}
               <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
-                <Route path="/dashboard" element={<MeetingRoomPage />} />
+                <Route path="/dashboard" element={
+                  <ErrorBoundary label="Meeting Room">
+                    <MeetingRoomPage />
+                  </ErrorBoundary>
+                } />
                 <Route path="/voice" element={<VoiceAgentHub />} />
                 <Route path="/approvals" element={<ApprovalQueue />} />
                 <Route path="/leads" element={<LeadManagement />} />
@@ -63,7 +75,8 @@ function App() {
                 <Route path="/database/:tableName" element={<DataBrowser />} />
               </Route>
 
-              <Route path="/" element={<Navigate to="/dashboard" />} />
+              {/* Redirect /app to dashboard for backward compat */}
+              <Route path="/app" element={<Navigate to="/dashboard" />} />
             </Routes>
           </Suspense>
           <ToastContainer />

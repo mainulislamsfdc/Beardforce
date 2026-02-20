@@ -21,8 +21,6 @@ interface ChatAgent {
  * Returns null if the agent ID is unknown.
  */
 export function createAgentInstance(agentId: string): ChatAgent | null {
-  const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
-
   switch (agentId) {
     case 'ceo':
       return new CEOAgent();
@@ -31,7 +29,7 @@ export function createAgentInstance(agentId: string): ChatAgent | null {
     case 'marketing':
       return new MarketingAgent();
     case 'it':
-      return new ITAgent(apiKey, databaseService);
+      return new ITAgent('', databaseService);
     default:
       return null;
   }

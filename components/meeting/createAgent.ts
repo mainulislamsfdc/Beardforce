@@ -25,7 +25,7 @@ export function createAgent(agentId: AgentId, config?: AgentFactoryConfig): Agen
   switch (agentId) {
     case 'it':
       return new ITAgent(
-        import.meta.env.VITE_GEMINI_API_KEY,
+        '',
         databaseService,
         cfg
       );

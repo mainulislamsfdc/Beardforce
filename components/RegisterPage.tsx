@@ -13,6 +13,7 @@ export default function RegisterPage() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [registered, setRegistered] = useState(false);
   const { signUp, signInWithProvider } = useAuth();
   const navigate = useNavigate();
 
@@ -53,7 +54,9 @@ export default function RegisterPage() {
         company_name: formData.companyName,
         phone: formData.phone
       });
-      navigate('/dashboard');
+      // Show "check your email" screen instead of immediately navigating.
+      // Supabase will send a confirmation email if email confirmation is enabled.
+      setRegistered(true);
     } catch (err: any) {
       console.error('Registration error:', err);
       if (err.message.includes('User already registered')) {
@@ -80,6 +83,36 @@ export default function RegisterPage() {
   };
 
   const inputClasses = "appearance-none relative block w-full px-4 py-3 bg-gray-700 border border-gray-600 placeholder-gray-500 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent";
+
+  // ── Email confirmation sent ─────────────────────────────────────────────────
+  if (registered) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900 px-4">
+        <div className="max-w-md w-full bg-gray-800 p-8 rounded-xl shadow-lg border border-gray-700 text-center">
+          <div className="w-16 h-16 bg-green-500/20 border border-green-500/40 rounded-full flex items-center justify-center mx-auto mb-5 text-3xl">✉️</div>
+          <h2 className="text-2xl font-bold text-white mb-3">Check your email</h2>
+          <p className="text-gray-400 mb-2">
+            We sent a confirmation link to <span className="text-white font-medium">{formData.email}</span>.
+          </p>
+          <p className="text-gray-400 text-sm mb-6">
+            Click the link in the email to activate your account, then sign in.
+          </p>
+          <Link
+            to="/login"
+            className="block w-full py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors text-center"
+          >
+            Go to Sign In
+          </Link>
+          <p className="text-xs text-gray-500 mt-4">
+            Didn't receive it? Check your spam folder or{' '}
+            <button onClick={() => setRegistered(false)} className="text-orange-400 hover:text-orange-300 underline">
+              try again
+            </button>.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
@@ -178,10 +211,16 @@ export default function RegisterPage() {
             )}
           </button>
 
-          <div className="text-center">
+          <div className="text-center space-y-2">
             <p className="text-sm text-gray-400">
               Already have an account?{' '}
               <Link to="/login" className="font-medium text-orange-400 hover:text-orange-300">Log in</Link>
+            </p>
+            <p className="text-xs text-gray-500">
+              By registering you agree to our{' '}
+              <Link to="/terms" className="text-orange-400 hover:text-orange-300">Terms of Service</Link>
+              {' '}and{' '}
+              <Link to="/privacy" className="text-orange-400 hover:text-orange-300">Privacy Policy</Link>.
             </p>
           </div>
         </form>

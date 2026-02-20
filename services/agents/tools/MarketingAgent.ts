@@ -1,7 +1,5 @@
-import { GoogleGenerativeAI, FunctionDeclaration, SchemaType as Type } from '@google/generative-ai';
+import { GeminiProxyClient, FunctionDeclaration, SchemaType as Type } from '../../geminiProxyClient';
 import { databaseService } from '../../database';
-
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
 // Dynamic config (updated by constructor for per-component instances)
 let _orgName = 'RunwayCRM';
@@ -730,21 +728,17 @@ const transformedTools: FunctionDeclaration[] = marketingTools.map(tool => {
 });
 
 export class MarketingAgent {
-  private genAI: GoogleGenerativeAI;
+  private genAI: GeminiProxyClient;
   private model: any;
   private chatSession: any;
   private conversationHistory: any[] = [];
 
   constructor(config?: { agentName?: string; orgName?: string; personality?: string }) {
-    if (!GEMINI_API_KEY) {
-      throw new Error('VITE_GEMINI_API_KEY is not configured');
-    }
-
     if (config?.orgName) _orgName = config.orgName;
     const agentName = config?.agentName || 'Marketing';
     const personality = config?.personality ? `\n\nAdditional personality guidance: ${config.personality}` : '';
 
-    this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    this.genAI = new GeminiProxyClient();
     this.model = this.genAI.getGenerativeModel({
       model: 'gemini-2.0-flash',
       systemInstruction: `You are the ${agentName} Agent for ${_orgName}. Your role is to:

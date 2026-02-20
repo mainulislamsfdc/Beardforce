@@ -6,7 +6,16 @@ import { useAgentConfig } from '../../context/AgentConfigContext';
 import { useBranding } from '../../context/BrandingContext';
 import { AGENT_REGISTRY } from './agentRegistry';
 import { createAgent, type AgentInstance } from './createAgent';
+import { ErrorBoundary } from '../ErrorBoundary';
 import type { AgentId } from '../../types';
+
+// Static welcome messages shown on first open (no API call, instant UX)
+const WELCOME_MESSAGES: Record<AgentId, string> = {
+  ceo: `Welcome! I'm your CEO Agent — your executive command center.\n\nI can:\n• Generate live KPI dashboards across Sales, Marketing & IT\n• Approve or reject pending change requests\n• Run strategic reports and forecasts\n• Coordinate multi-agent workflows\n• Track AI budget and resource allocation\n\nTry: **"Generate executive dashboard"** or **"Run a system health check"**`,
+  sales: `Hey! I'm your Sales Agent — I live and breathe pipeline.\n\nI can:\n• Qualify and score inbound leads\n• Create and track opportunities through your pipeline\n• Draft personalized emails (and send them if SendGrid is connected)\n• Generate revenue reports and deal forecasts\n• Create price quotes from your product catalog\n\nTry: **"Show me all leads"** or **"Draft a follow-up email for a new prospect"**`,
+  marketing: `Hi! I'm your Marketing Agent — campaigns, content, and conversions.\n\nI can:\n• Create and track marketing campaigns\n• Segment your audience for targeted outreach\n• Draft email sequences and social media content\n• Plan and schedule content calendars\n• Analyze marketing performance\n\nTry: **"Create a new email campaign"** or **"Segment leads by source"**`,
+  it: `Hello! I'm your IT Agent — databases, code, and systems.\n\nI can:\n• Browse, query, and modify all CRM tables\n• Generate React + TypeScript components using Claude AI\n• Create system snapshots for safe rollbacks\n• Analyze database performance\n• Import bulk data\n\nTry: **"Show all tables"** or **"Read all records from leads"**`,
+};
 
 interface ChatMessage {
   role: 'user' | 'agent';
@@ -46,13 +55,19 @@ const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agentId }) => {
     });
   }, [agentId, agentCfg.custom_name, branding.app_name, agentCfg.personality_prompt]);
 
-  // Initialize database
+  // Initialize database + inject welcome message on first open
   useEffect(() => {
     const initDB = async () => {
       if (user?.id && !dbInitialized) {
         try {
           await initializeDatabase(user.id);
           setDbInitialized(true);
+          // Show static welcome message — no API call needed
+          setMessages([{
+            role: 'agent',
+            content: WELCOME_MESSAGES[agentId],
+            timestamp: new Date(),
+          }]);
         } catch (error) {
           console.error('Database connection failed:', error);
           setMessages([{
@@ -64,7 +79,7 @@ const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agentId }) => {
       }
     };
     initDB();
-  }, [user?.id, dbInitialized]);
+  }, [user?.id, dbInitialized, agentId]);
 
   // Auto-scroll
   useEffect(() => {
@@ -215,4 +230,11 @@ const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agentId }) => {
   );
 };
 
-export default AgentChatPanel;
+// Wrap with ErrorBoundary so an agent crash never white-screens the whole app
+const AgentChatPanelWithBoundary: React.FC<AgentChatPanelProps> = (props) => (
+  <ErrorBoundary label={`${props.agentId.toUpperCase()} Agent`} inline>
+    <AgentChatPanel {...props} />
+  </ErrorBoundary>
+);
+
+export default AgentChatPanelWithBoundary;
