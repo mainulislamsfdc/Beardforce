@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Users, Shield, RotateCcw, Trash2, Plus, Save, AlertTriangle, Clock, Database, ChevronDown, Download, Bot, Palette, SlidersHorizontal } from 'lucide-react';
+import { Settings, Users, Shield, RotateCcw, Trash2, Plus, Save, AlertTriangle, Clock, Database, ChevronDown, Download, Bot, Palette, SlidersHorizontal, Brain, Plug, CreditCard } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useOrg } from '../context/OrgContext';
 import { useAgentConfig } from '../context/AgentConfigContext';
@@ -8,9 +8,12 @@ import { databaseService, initializeDatabase } from '../services/database';
 import AgentSettingsTab from './settings/AgentSettingsTab';
 import BrandingSettingsTab from './settings/BrandingSettingsTab';
 import FieldSettingsTab from './settings/FieldSettingsTab';
+import ManifestTab from './settings/ManifestTab';
+import IntegrationsTab from './settings/IntegrationsTab';
+import BillingTab from './settings/BillingTab';
 import type { OrgRole, OrgMember } from '../types';
 
-type Tab = 'access' | 'agents' | 'branding' | 'fields' | 'system' | 'rollback';
+type Tab = 'access' | 'agents' | 'billing' | 'branding' | 'fields' | 'integrations' | 'manifest' | 'system' | 'rollback';
 
 export const SettingsPage: React.FC = () => {
   const { user } = useAuth();
@@ -207,8 +210,11 @@ export const SettingsPage: React.FC = () => {
   const tabs: { id: Tab; label: string; icon: any }[] = [
     { id: 'access', label: 'Access', icon: Users },
     { id: 'agents', label: 'Agents', icon: Bot },
+    { id: 'billing', label: 'Billing', icon: CreditCard },
     { id: 'branding', label: 'Branding', icon: Palette },
     { id: 'fields', label: 'Fields', icon: SlidersHorizontal },
+    { id: 'integrations', label: 'Integrations', icon: Plug },
+    { id: 'manifest', label: 'Manifest', icon: Brain },
     { id: 'system', label: 'System', icon: Database },
     { id: 'rollback', label: 'Rollback', icon: RotateCcw },
   ];
@@ -406,8 +412,11 @@ export const SettingsPage: React.FC = () => {
       )}
 
       {activeTab === 'agents' && <AgentSettingsTab />}
+      {activeTab === 'billing' && user?.id && <BillingTab userId={user.id} />}
       {activeTab === 'branding' && <BrandingSettingsTab />}
       {activeTab === 'fields' && <FieldSettingsTab />}
+      {activeTab === 'integrations' && user?.id && <IntegrationsTab userId={user.id} />}
+      {activeTab === 'manifest' && <ManifestTab />}
 
       {activeTab === 'system' && (
         <div className="space-y-4">

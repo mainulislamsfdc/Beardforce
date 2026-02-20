@@ -5,6 +5,9 @@
 
 import { DatabaseService } from '../../database/DatabaseService';
 import { ColumnDefinition, TableSchema, QueryFilter } from '../../database/DatabaseAdapter';
+import { claudeService } from '../../claudeService';
+import { changeLogService } from '../../manifestService';
+import type { ClaudeCodeRequest } from '../../../types';
 
 export interface ITAgentTool {
   name: string;
@@ -320,10 +323,10 @@ export class ITAgentTools {
           return { tables: report, total_tables: tables.length };
         }
       },
-      // ---- Code Generation Tools ----
+      // ---- Code Generation Tools (Claude-Powered) ----
       {
         name: 'generate_component',
-        description: 'Generate a React component with TypeScript and Tailwind CSS. Use this when the user wants to create a new UI page, widget, form, table, or card component.',
+        description: 'Generate a production-ready React component using Claude AI with full codebase context. Creates complete, working code that follows all project conventions — no TODOs or placeholders.',
         parameters: {
           component_name: { type: 'string', required: true },
           description: { type: 'string', required: true },
@@ -332,27 +335,57 @@ export class ITAgentTools {
           includes_api_calls: { type: 'boolean', required: false }
         },
         execute: async (params: { component_name: string; description: string; component_type?: string; includes_state?: boolean; includes_api_calls?: boolean }) => {
-          const code = this.generateComponentTemplate(params);
+          const userId = this.dbService.getUserId();
+          let code: string;
+          let engine = 'template';
+
+          try {
+            // Attempt Claude-powered generation
+            const request: ClaudeCodeRequest = {
+              task: `Create a React component called "${params.component_name}": ${params.description}. Type: ${params.component_type || 'component'}. ${params.includes_state ? 'Include state management with useState/useEffect.' : ''} ${params.includes_api_calls ? 'Include database calls via databaseService with initializeDatabase guard and useAuth hook.' : ''}`,
+              task_type: 'generate_component',
+              target_files: [`components/${params.component_name}.tsx`],
+              constraints: [
+                'Must be a complete, working React functional component',
+                'Use TypeScript and Tailwind CSS dark theme (bg-gray-900, bg-gray-800, text-white)',
+                'Include all imports — no missing dependencies',
+                'No TODO comments or placeholder code',
+                'Export as named + default export'
+              ]
+            };
+
+            const response = await claudeService.generateCode(userId, request);
+            code = response.code;
+            engine = 'claude';
+          } catch (err: any) {
+            // Fallback to template if Claude is unavailable
+            code = this.generateComponentTemplate(params);
+            engine = 'template';
+            console.warn('Claude unavailable for generate_component, using template:', err.message);
+          }
+
+          // Save to code_snippets
           try {
             await this.dbService.getAdapter().create('code_snippets', {
-              user_id: this.dbService.getUserId(),
-              agent_name: 'IT',
+              user_id: userId,
+              agent_name: `IT (${engine})`,
               title: params.component_name,
               description: params.description,
               code,
               language: 'typescript',
               component_type: params.component_type || 'component'
             });
-          } catch (e) {
+          } catch {
             // code_snippets table may not exist yet
           }
-          await this.dbService.logChange('IT', 'code_generation', `Generated component: ${params.component_name}`, null, { component_name: params.component_name, type: params.component_type });
-          return { success: true, component_name: params.component_name, code, message: `Generated ${params.component_name} component. Code saved to snippets.` };
+
+          await this.dbService.logChange('IT', 'code_generation', `Generated component: ${params.component_name} [engine: ${engine}]`, null, { component_name: params.component_name, type: params.component_type, engine });
+          return { success: true, component_name: params.component_name, code, engine, message: `Generated ${params.component_name} using ${engine === 'claude' ? 'Claude AI (full codebase context)' : 'template fallback'}. Code saved to snippets.` };
         }
       },
       {
         name: 'generate_workflow',
-        description: 'Create an automation workflow that defines triggers, conditions, and actions. Use this when the user wants to automate a business process like lead follow-ups, notifications, or data pipelines.',
+        description: 'Create a production-ready automation workflow using Claude AI. Generates complete trigger/condition/action code that integrates with the existing workflow engine.',
         parameters: {
           workflow_name: { type: 'string', required: true },
           trigger: { type: 'string', required: true },
@@ -360,46 +393,184 @@ export class ITAgentTools {
           actions: { type: 'string', required: false }
         },
         execute: async (params: { workflow_name: string; trigger: string; description: string; actions?: string }) => {
-          const code = this.generateWorkflowTemplate(params);
+          const userId = this.dbService.getUserId();
+          let code: string;
+          let engine = 'template';
+
+          try {
+            const request: ClaudeCodeRequest = {
+              task: `Create a workflow called "${params.workflow_name}": ${params.description}. Trigger: ${params.trigger}. Actions: ${params.actions || 'log event, notify user'}. Must integrate with the existing workflowEngine.ts pattern (WorkflowStep[] with action/condition/delay types, executeWorkflow function).`,
+              task_type: 'generate_component',
+              target_files: ['services/workflowEngine.ts'],
+              constraints: [
+                'Follow the existing Workflow interface from workflowEngine.ts',
+                'Use databaseService for all data operations',
+                'Use notificationService.createNotification() for notifications',
+                'Include proper error handling',
+                'No placeholder actions — implement real logic'
+              ]
+            };
+
+            const response = await claudeService.generateCode(userId, request);
+            code = response.code;
+            engine = 'claude';
+          } catch (err: any) {
+            code = this.generateWorkflowTemplate(params);
+            engine = 'template';
+            console.warn('Claude unavailable for generate_workflow, using template:', err.message);
+          }
+
           try {
             await this.dbService.getAdapter().create('code_snippets', {
-              user_id: this.dbService.getUserId(),
-              agent_name: 'IT',
+              user_id: userId,
+              agent_name: `IT (${engine})`,
               title: params.workflow_name,
               description: params.description,
               code,
               language: 'typescript',
               component_type: 'workflow'
             });
-          } catch (e) {
+          } catch {
             // code_snippets table may not exist yet
           }
-          await this.dbService.logChange('IT', 'code_generation', `Generated workflow: ${params.workflow_name}`, null, { workflow_name: params.workflow_name, trigger: params.trigger });
-          return { success: true, code, message: `Generated workflow: ${params.workflow_name}` };
+
+          await this.dbService.logChange('IT', 'code_generation', `Generated workflow: ${params.workflow_name} [engine: ${engine}]`, null, { workflow_name: params.workflow_name, trigger: params.trigger, engine });
+          return { success: true, code, engine, message: `Generated workflow: ${params.workflow_name} using ${engine === 'claude' ? 'Claude AI' : 'template fallback'}.` };
         }
       },
       {
         name: 'modify_component',
-        description: 'Generate a code modification plan for an existing component. The user describes what to change and this tool generates updated code.',
+        description: 'Generate actual code modifications for an existing component using Claude AI. Understands the full codebase and produces real diffs.',
         parameters: {
           component_name: { type: 'string', required: true },
           modification_description: { type: 'string', required: true },
           current_behavior: { type: 'string', required: false }
         },
         execute: async (params: { component_name: string; modification_description: string; current_behavior?: string }) => {
-          const modification = {
-            component: params.component_name,
-            changes: params.modification_description,
-            current: params.current_behavior || 'Not specified',
-            generated_at: new Date().toISOString()
-          };
-          await this.dbService.logChange('IT', 'code_modification', `Modification proposed for: ${params.component_name}`, null, modification);
-          return { success: true, modification, message: `Generated modification plan for ${params.component_name}. The AI will now describe the code changes needed.` };
+          const userId = this.dbService.getUserId();
+
+          try {
+            const request: ClaudeCodeRequest = {
+              task: `Modify the component "${params.component_name}": ${params.modification_description}. ${params.current_behavior ? `Current behavior: ${params.current_behavior}` : ''}`,
+              task_type: 'modify_code',
+              target_files: [`components/${params.component_name}.tsx`],
+              context_hint: params.current_behavior || undefined,
+              constraints: [
+                'Show the complete modified component (not just the diff)',
+                'Preserve all existing functionality unless explicitly told to change it',
+                'Follow existing code conventions and patterns'
+              ]
+            };
+
+            const response = await claudeService.generateCode(userId, request);
+
+            // Log structured change
+            try {
+              await changeLogService.addEntry(userId, {
+                category: 'ai_generated',
+                agent: 'IT (Claude)',
+                title: `Modified ${params.component_name}`,
+                description: params.modification_description,
+                files_affected: response.files_affected,
+                code_diff: response.code.slice(0, 10000),
+                context_summary: response.change_summary,
+                status: 'pending',
+                parent_id: null
+              });
+            } catch {
+              // structured_changes table may not exist
+            }
+
+            return {
+              success: true,
+              code: response.code,
+              explanation: response.explanation,
+              engine: 'claude',
+              message: `Claude generated modifications for ${params.component_name}. Review the code below.`
+            };
+          } catch (err: any) {
+            // Fallback to plan-only
+            console.warn('Claude unavailable for modify_component:', err.message);
+            const modification = {
+              component: params.component_name,
+              changes: params.modification_description,
+              current: params.current_behavior || 'Not specified',
+              generated_at: new Date().toISOString()
+            };
+            await this.dbService.logChange('IT', 'code_modification', `Modification proposed for: ${params.component_name}`, null, modification);
+            return { success: true, modification, engine: 'template', message: `Claude unavailable. Generated modification plan for ${params.component_name}.` };
+          }
+        }
+      },
+      {
+        name: 'smart_code_task',
+        description: 'Ask Claude AI to perform any code task: generate features, fix bugs, refactor, add functionality, or explain code. This tool has full understanding of the entire RunwayCRM codebase.',
+        parameters: {
+          task: { type: 'string', required: true },
+          task_type: { type: 'string', required: false },
+          target_files: { type: 'string', required: false }
+        },
+        execute: async (params: { task: string; task_type?: string; target_files?: string }) => {
+          const userId = this.dbService.getUserId();
+
+          try {
+            const request: ClaudeCodeRequest = {
+              task: params.task,
+              task_type: (params.task_type as any) || 'add_feature',
+              target_files: params.target_files ? params.target_files.split(',').map(f => f.trim()) : undefined
+            };
+
+            const response = await claudeService.generateCode(userId, request);
+
+            // Save to code_snippets
+            try {
+              await this.dbService.getAdapter().create('code_snippets', {
+                user_id: userId,
+                agent_name: 'IT (Claude)',
+                title: params.task.slice(0, 100),
+                description: params.task,
+                code: response.code,
+                language: 'typescript',
+                component_type: 'ai_task'
+              });
+            } catch {
+              // code_snippets table may not exist
+            }
+
+            return {
+              success: true,
+              code: response.code,
+              explanation: response.explanation,
+              files_affected: response.files_affected,
+              confidence: response.confidence,
+              engine: 'claude',
+              message: response.explanation
+            };
+          } catch (err: any) {
+            const msg = err.message || 'Unknown error';
+            const isCredits = msg.toLowerCase().includes('credit') || msg.toLowerCase().includes('balance');
+            const isAuth = msg.toLowerCase().includes('api key') || msg.toLowerCase().includes('authentication');
+
+            let helpText: string;
+            if (isCredits) {
+              helpText = `Claude AI Error: ${msg}\n\nYour Anthropic API key is valid but the account has insufficient credits. Please visit https://console.anthropic.com to add credits.`;
+            } else if (isAuth) {
+              helpText = `Claude AI Error: ${msg}\n\nPlease check your API key:\n  supabase secrets set ANTHROPIC_API_KEY=sk-ant-...`;
+            } else {
+              helpText = `Claude AI Error: ${msg}\n\nTo enable Claude-powered code generation:\n1. Deploy the edge function: supabase functions deploy claude-proxy\n2. Set the API key: supabase secrets set ANTHROPIC_API_KEY=sk-ant-...`;
+            }
+
+            return {
+              success: false,
+              engine: 'unavailable',
+              message: helpText
+            };
+          }
         }
       },
       {
         name: 'list_code_snippets',
-        description: 'List all saved code snippets generated by the IT Agent. Use this when the user asks to see previous code generations.',
+        description: 'List all saved code snippets generated by the IT Agent (both template and Claude-generated). Use this when the user asks to see previous code generations.',
         parameters: {
           component_type: { type: 'string', required: false }
         },
@@ -410,7 +581,7 @@ export class ITAgentTools {
               filters.push({ column: 'component_type', operator: '=', value: params.component_type });
             }
             const snippets = await this.dbService.getAdapter().readAll('code_snippets', filters);
-            return { snippets: snippets.map((s: any) => ({ id: s.id, title: s.title, description: s.description, type: s.component_type, language: s.language, created_at: s.created_at })), count: snippets.length };
+            return { snippets: snippets.map((s: any) => ({ id: s.id, title: s.title, description: s.description, type: s.component_type, language: s.language, agent: s.agent_name, created_at: s.created_at })), count: snippets.length };
           } catch {
             return { snippets: [], count: 0, message: 'Code snippets table not available yet. Run the SQL setup in Supabase.' };
           }

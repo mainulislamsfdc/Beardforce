@@ -96,6 +96,55 @@ export function buildAgentParticipants(configs: Record<string, any>): AgentParti
   });
 }
 
+/** Agent ordering — CEO always goes first when present. */
+const AGENT_ORDER: string[] = ['ceo', 'sales', 'marketing', 'it'];
+
+/**
+ * Parse @mentions from a user message.
+ * Supports: @CEO, @Sales, @Marketing, @IT, @all, @everyone, @team
+ * Returns the list of agent IDs to route to, or null if no mentions found.
+ */
+export function parseMentions(
+  message: string,
+  participants: AgentParticipant[]
+): string[] | null {
+  const lower = message.toLowerCase();
+
+  // @all / @everyone / @team → all agents
+  if (/@(all|everyone|team)\b/i.test(message)) {
+    return AGENT_ORDER.filter(id => participants.some(p => p.id === id));
+  }
+
+  const mentioned: string[] = [];
+  for (const p of participants) {
+    // Match @id (e.g. @ceo, @it) or @name (e.g. @"Sales Manager", @sales)
+    const nameWords = p.name.toLowerCase().split(/\s+/);
+    const patterns = [p.id, ...nameWords];
+    for (const pat of patterns) {
+      if (new RegExp(`@${pat}\\b`, 'i').test(message)) {
+        if (!mentioned.includes(p.id)) mentioned.push(p.id);
+        break;
+      }
+    }
+  }
+
+  if (mentioned.length === 0) return null;
+
+  // Sort by AGENT_ORDER (CEO first)
+  return mentioned.sort((a, b) => AGENT_ORDER.indexOf(a) - AGENT_ORDER.indexOf(b));
+}
+
+/** Detect if an agent response ends with a question directed at the user. */
+function responseAsksQuestion(text: string): boolean {
+  const trimmed = text.trim();
+  // Must end with a question mark
+  if (!trimmed.endsWith('?')) return false;
+  // Check last sentence contains question-like patterns
+  const lastSentence = trimmed.split(/[.!]\s+/).pop() || trimmed;
+  const questionPatterns = /\b(would you|could you|can you|do you|shall I|should I|what do you|how do you|what would|which|would that|does that|is there|are there|want me to|like me to|prefer|need me|clarif)/i;
+  return questionPatterns.test(lastSentence);
+}
+
 export class MeetingOrchestrator {
   private agents: Record<string, any> = {};
   private dbService: DatabaseService | null = null;
@@ -128,14 +177,41 @@ export class MeetingOrchestrator {
   }
 
   /**
-   * Ask a question to specific agents (or all). Agents respond in order.
-   * Returns an async generator so the UI can render responses as they arrive.
+   * Resolve which agents should respond to a message.
+   * If @mentions are found, route to those agents.
+   * Otherwise, default to CEO only.
+   * Returns { agentIds, mentionedExplicitly }.
+   */
+  resolveTargets(
+    userMessage: string,
+    selectedParticipants: string[]
+  ): { agentIds: string[]; mentionedExplicitly: boolean } {
+    const mentioned = parseMentions(userMessage, this.participants);
+    if (mentioned && mentioned.length > 0) {
+      // Only include agents that are actually in the meeting
+      const filtered = mentioned.filter(id => selectedParticipants.includes(id));
+      if (filtered.length > 0) {
+        return { agentIds: filtered, mentionedExplicitly: true };
+      }
+    }
+    // Default: CEO only (if in meeting), otherwise first participant
+    const defaultAgent = selectedParticipants.includes('ceo')
+      ? 'ceo'
+      : selectedParticipants[0];
+    return { agentIds: defaultAgent ? [defaultAgent] : [], mentionedExplicitly: false };
+  }
+
+  /**
+   * Ask a question to specific agents. Agents respond one at a time.
+   * If an agent asks a clarifying question, the chain stops (yields a
+   * `stoppedForQuestion` flag on the last message) so the UI can wait
+   * for user input before continuing.
    */
   async *askAgents(
     userMessage: string,
-    agentIds: string[] = ['ceo', 'sales', 'marketing', 'it'],
+    agentIds: string[] = ['ceo'],
     onStatusChange?: (agentId: string, status: 'thinking' | 'speaking' | 'idle') => void
-  ): AsyncGenerator<MeetingMessage> {
+  ): AsyncGenerator<MeetingMessage & { stoppedForQuestion?: boolean }> {
     // Add user message to transcript
     const userMsg: MeetingMessage = {
       id: `msg-${Date.now()}-user`,
@@ -153,12 +229,27 @@ export class MeetingOrchestrator {
       .map(m => `${m.agentName}: ${m.content}`)
       .join('\n');
 
-    // Wrap each question with meeting context
-    const meetingPrompt = (agentName: string) =>
-      `[TEAM MEETING] The following is a discussion in a team meeting. Respond concisely (2-4 sentences) from your perspective as ${agentName}. Don't repeat what others said.\n\nRecent discussion:\n${recentContext}\n\nUser's question/topic: ${userMessage}`;
+    const isSoloResponse = agentIds.length === 1;
 
-    // Route to each agent sequentially so they can hear each other
-    for (const agentId of agentIds) {
+    // Updated prompt — encourages interactive behavior
+    const meetingPrompt = (agentName: string) =>
+      `[TEAM MEETING] You are ${agentName} in a live team meeting with the user (your boss/colleague).
+
+Rules:
+- Respond concisely (2-4 sentences) from your role's perspective.
+- Don't repeat what others have already said.
+- If the user's request is unclear or you need more details to give a good answer, ASK a clarifying question instead of guessing. End your response with the question.
+- Be conversational and natural — this is a real-time discussion, not a report.
+${isSoloResponse ? '- You are the only one responding right now. Give a focused, complete answer.' : '- Other team members may also respond after you. Stay in your lane.'}
+
+Recent discussion:
+${recentContext}
+
+User says: ${userMessage}`;
+
+    // Route to each agent sequentially
+    for (let i = 0; i < agentIds.length; i++) {
+      const agentId = agentIds[i];
       onStatusChange?.(agentId, 'thinking');
 
       try {
@@ -174,18 +265,29 @@ export class MeetingOrchestrator {
           response = `${agentId} agent not initialized.`;
         }
 
-        const msg: MeetingMessage = {
+        // Check if the agent is asking the user a question
+        const asksQuestion = responseAsksQuestion(response);
+        const hasMoreAgents = i < agentIds.length - 1;
+
+        const msg: MeetingMessage & { stoppedForQuestion?: boolean } = {
           id: `msg-${Date.now()}-${agentId}`,
           agentId,
           agentName: this.participants.find(a => a.id === agentId)?.name || agentId,
           role: 'agent',
           content: response,
           timestamp: new Date(),
+          // Signal the UI to pause for user input
+          stoppedForQuestion: asksQuestion && hasMoreAgents ? true : undefined,
         };
 
         this.transcript.push(msg);
         onStatusChange?.(agentId, 'idle');
         yield msg;
+
+        // If agent asked a question and there are more agents waiting, stop the chain
+        if (asksQuestion && hasMoreAgents) {
+          return;
+        }
       } catch (error: any) {
         const errorMsg: MeetingMessage = {
           id: `msg-${Date.now()}-${agentId}-err`,

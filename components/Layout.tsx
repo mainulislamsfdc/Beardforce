@@ -1,21 +1,20 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
-import { Database, TrendingUp, Megaphone, Crown, Users, CheckSquare, Mic, LogOut, LayoutDashboard, PanelLeftClose, PanelLeftOpen, Settings, Table2, ChevronDown, ChevronRight, Shield, GitBranch, Video, Code2 } from 'lucide-react';
+import { Users, CheckSquare, Mic, LogOut, LayoutDashboard, PanelLeftClose, PanelLeftOpen, Settings, Table2, ChevronDown, ChevronRight, Shield, GitBranch, Code2, HelpCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useOrg } from '../context/OrgContext';
 import { useBranding } from '../context/BrandingContext';
-import { useAgentConfig } from '../context/AgentConfigContext';
 import NotificationBell from './NotificationBell';
 
 export const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [dbSectionOpen, setDbSectionOpen] = useState(false);
+  const [mgmtSectionOpen, setMgmtSectionOpen] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { role, isAdmin } = useOrg();
   const { branding } = useBranding();
-  const { getAgent } = useAgentConfig();
 
   const handleSignOut = async () => {
     navigate('/login');
@@ -27,22 +26,16 @@ export const Layout: React.FC = () => {
     { path: '/leads', label: 'Lead Management', icon: Users },
     { path: '/approvals', label: 'Approval Queue', icon: CheckSquare },
     { path: '/workflows', label: 'Workflows', icon: GitBranch },
-    { path: '/meeting', label: 'Teams Meeting', icon: Video },
     { path: '/voice', label: 'Voice Interface', icon: Mic },
     { path: '/code-editor', label: 'Code Editor', icon: Code2 },
     { path: '/audit', label: 'Audit Trail', icon: Shield },
+    { path: '/help', label: 'Help & Docs', icon: HelpCircle },
     ...(isAdmin ? [{ path: '/settings', label: 'Settings', icon: Settings }] : []),
   ];
 
   const navItems = [
     { section: 'main', items: [
       { path: '/dashboard', label: 'Meeting Room', icon: LayoutDashboard }
-    ]},
-    { section: 'Agents', items: [
-      { path: '/it-agent', label: getAgent('it').custom_name, icon: Database },
-      { path: '/sales-agent', label: getAgent('sales').custom_name, icon: TrendingUp },
-      { path: '/marketing-agent', label: getAgent('marketing').custom_name, icon: Megaphone },
-      { path: '/ceo-agent', label: getAgent('ceo').custom_name, icon: Crown }
     ]},
     { section: 'Management', items: managementItems },
     { section: 'Database', items: [
@@ -76,15 +69,18 @@ export const Layout: React.FC = () => {
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 min-w-[240px]">
           {navItems.map((group) => {
-            const isCollapsible = group.section === 'Database';
-            const isOpen = isCollapsible ? dbSectionOpen : true;
+            const isCollapsible = group.section === 'Database' || group.section === 'Management';
+            const isOpen = group.section === 'Database' ? dbSectionOpen : group.section === 'Management' ? mgmtSectionOpen : true;
 
             return (
               <div key={group.section} className={group.section !== 'main' ? 'mt-6 px-4' : ''}>
                 {group.section !== 'main' && (
                   <div
                     className={`flex items-center justify-between mb-2 ${isCollapsible ? 'cursor-pointer hover:text-gray-300' : ''}`}
-                    onClick={() => { if (isCollapsible) setDbSectionOpen(!dbSectionOpen); }}
+                    onClick={() => {
+                      if (group.section === 'Database') setDbSectionOpen(!dbSectionOpen);
+                      if (group.section === 'Management') setMgmtSectionOpen(!mgmtSectionOpen);
+                    }}
                   >
                     <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                       {group.section}

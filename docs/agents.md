@@ -162,7 +162,7 @@ Unlike the other three agents (which use `@google/generative-ai`), the IT Agent 
 ### System Prompt Summary
 Expert IT manager focused on database operations, schema design, code generation, and system reliability. Always uses tools when available.
 
-### Tools (20)
+### Tools (21)
 
 #### Database Tools (14)
 
@@ -183,14 +183,17 @@ Expert IT manager focused on database operations, schema design, code generation
 | `import_data` | Bulk import records into a table | `table_name`, `records` |
 | `performance_report` | Database-wide performance analysis | — |
 
-#### Code Generation Tools (4)
+#### Code Generation Tools (5) — Claude-Powered
 
-| Tool | Description | Key Parameters |
-|------|-------------|---------------|
-| `generate_component` | Generate React + TypeScript + Tailwind CSS component | `component_name`, `component_type`, `description` |
-| `generate_workflow` | Generate automation workflow code | `workflow_name`, `trigger`, `actions` |
-| `modify_component` | Generate modifications for an existing component | `component_name`, `modifications` |
-| `list_code_snippets` | List all saved code snippets | — |
+All code generation tools attempt Claude AI first (with full codebase manifest context), falling back to template generators if Claude is unavailable.
+
+| Tool | Description | Key Parameters | Engine |
+|------|-------------|---------------|--------|
+| `generate_component` | Generate production-ready React component with full project context | `component_name`, `description`, `component_type`, `includes_state`, `includes_api_calls` | Claude → Template |
+| `generate_workflow` | Generate automation workflow that integrates with workflowEngine.ts | `workflow_name`, `trigger`, `description`, `actions` | Claude → Template |
+| `modify_component` | Generate actual code modifications for an existing component | `component_name`, `modification_description`, `current_behavior` | Claude → Plan-only |
+| `smart_code_task` | Universal code task — generate features, fix bugs, refactor, explain code | `task`, `task_type`, `target_files` | Claude only |
+| `list_code_snippets` | List all saved code snippets (both Claude and template generated) | `component_type?` | — |
 
 #### System Tools (2)
 

@@ -53,11 +53,12 @@ DATABASE TOOLS:
 - import_data: Bulk import records
 - performance_report: Database-wide performance analysis
 
-CODE GENERATION TOOLS:
-- generate_component: Generate a React + TypeScript + Tailwind CSS component (page, widget, form, table, card)
-- generate_workflow: Create automation workflow code with triggers, conditions, and actions
-- modify_component: Generate code modifications for an existing component
-- list_code_snippets: List all previously generated code snippets
+CODE GENERATION TOOLS (powered by Claude AI with full codebase knowledge):
+- generate_component: Generate a production-ready React + TypeScript + Tailwind CSS component using Claude AI. Creates COMPLETE working code with no TODOs.
+- generate_workflow: Create production-ready automation workflows using Claude AI that integrate with the existing workflow engine.
+- modify_component: Generate real code modifications for existing components using Claude AI. Understands the full codebase.
+- smart_code_task: The most powerful tool — ask Claude AI to do ANY code task (features, bugs, refactoring, explanations). Has full codebase understanding.
+- list_code_snippets: List all previously generated code snippets (template and Claude-generated)
 
 SYSTEM TOOLS:
 - create_restore_point: Create a system restore point (snapshot of all CRM data) before major changes
@@ -70,9 +71,11 @@ IMPORTANT RULES:
 4. Warn about destructive operations
 5. Always use a tool when one is available - never say you cannot do something if a tool exists for it
 6. When the user asks to "write code", "create a component", "build a page", or "generate", use generate_component or generate_workflow
-7. Always display generated code in your response so the user can review and copy it
-8. When generating code, follow project conventions: React functional components, TypeScript, Tailwind CSS dark theme (bg-gray-900, bg-gray-800, text-white, border-gray-700)
-9. Before major database changes, suggest creating a restore point first${personalityNote}`;
+7. For complex or custom requests (fix bugs, add features, refactor, explain code), use smart_code_task — it has full codebase understanding via Claude AI
+8. Always display generated code in your response so the user can review and copy it
+9. When generating code, follow project conventions: React functional components, TypeScript, Tailwind CSS dark theme (bg-gray-900, bg-gray-800, text-white, border-gray-700)
+10. Before major database changes, suggest creating a restore point first
+11. Code generation uses Claude AI when available, with automatic fallback to templates if Claude is not configured${personalityNote}`;
   }
 
   async chat(userMessage: string): Promise<string> {

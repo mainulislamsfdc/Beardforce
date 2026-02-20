@@ -25,3 +25,12 @@ dist-ssr
 
 .env.local
 .env
+
+# Supabase CLI temp files
+supabase/.temp/
+
+# Windows artifacts
+nul
+
+# Claude internal
+.claude/

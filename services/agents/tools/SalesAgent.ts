@@ -360,13 +360,15 @@ const salesTools: ToolDefinition[] = [
   },
   {
     name: 'draft_email',
-    description: 'Generate a professional email draft for a lead or opportunity',
+    description: 'Generate a professional email draft for a lead or opportunity. If send_now is true and recipient_email is provided, the email is actually sent via SendGrid.',
     parameters: {
       recipient_name: { type: 'string', required: true, description: 'Name of the recipient' },
+      recipient_email: { type: 'string', required: false, description: 'Email address to send to (required if send_now is true)' },
       email_type: { type: 'string', required: true, description: 'Type of email (introduction, follow_up, proposal, thank_you, closing)' },
-      context: { type: 'string', required: false, description: 'Additional context about the opportunity' }
+      context: { type: 'string', required: false, description: 'Additional context about the opportunity' },
+      send_now: { type: 'boolean', required: false, description: 'If true, send the email immediately via SendGrid' }
     },
-    handler: async ({ recipient_name, email_type, context }) => {
+    handler: async ({ recipient_name, recipient_email, email_type, context, send_now }) => {
       const templates: Record<string, string> = {
         introduction: `Subject: Introduction to ${_orgName} CRM Solutions
 
@@ -437,10 +439,49 @@ Best regards,
 [Your Name]`
       };
 
+      const draft = templates[email_type] || templates['follow_up'];
+
+      // If send_now and we have an email address, send via SendGrid integration
+      if (send_now && recipient_email) {
+        try {
+          const { integrationService } = await import('../../integrations/IntegrationService');
+          // Extract subject from the template (first line after "Subject: ")
+          const subjectMatch = draft.match(/Subject:\s*(.+)/);
+          const subject = subjectMatch?.[1] || `${email_type} email from ${_orgName}`;
+          const htmlBody = draft.replace(/Subject:.*\n\n?/, '').replace(/\n/g, '<br>');
+
+          const result = await integrationService.sendEmail(recipient_email, subject, htmlBody);
+          if (result.success) {
+            return {
+              success: true,
+              email_draft: draft,
+              sent: true,
+              sent_to: recipient_email,
+              message: `Email sent to ${recipient_email} successfully!`
+            };
+          } else {
+            return {
+              success: true,
+              email_draft: draft,
+              sent: false,
+              send_error: result.error,
+              message: `Draft generated but sending failed: ${result.error}. Connect SendGrid in Settings > Integrations to enable sending.`
+            };
+          }
+        } catch {
+          return {
+            success: true,
+            email_draft: draft,
+            sent: false,
+            message: `Draft generated. To send emails, connect SendGrid in Settings > Integrations.`
+          };
+        }
+      }
+
       return {
         success: true,
-        email_draft: templates[email_type] || templates['follow_up'],
-        message: `Generated ${email_type} email for ${recipient_name}`
+        email_draft: draft,
+        message: `Generated ${email_type} email for ${recipient_name}. To send it, call again with send_now=true and recipient_email.`
       };
     }
   },

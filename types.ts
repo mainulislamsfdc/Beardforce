@@ -277,3 +277,57 @@ export interface AvatarDefinition {
   name: string;
   category: 'professional' | 'robot' | 'animal' | 'abstract';
 }
+
+// --- Codebase Manifest (AI Context System) ---
+
+export interface ManifestSection {
+  key: string;
+  title: string;
+  content: string;
+  token_estimate: number;
+}
+
+export interface CodebaseManifest {
+  id: string;
+  user_id: string;
+  org_id: string | null;
+  version: string;
+  locked: boolean;
+  locked_at: string | null;
+  sections: ManifestSection[];
+  total_tokens: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StructuredChangeEntry {
+  id: string;
+  user_id: string;
+  category: 'feature' | 'bugfix' | 'schema' | 'config' | 'refactor' | 'ai_generated';
+  agent: string;
+  title: string;
+  description: string;
+  files_affected: string[];
+  code_diff: string | null;
+  context_summary: string;
+  status: 'pending' | 'approved' | 'rejected' | 'deployed';
+  parent_id: string | null;
+  created_at: string;
+}
+
+export interface ClaudeCodeRequest {
+  task: string;
+  task_type: 'generate_component' | 'modify_code' | 'fix_bug' | 'add_feature' | 'refactor' | 'explain';
+  target_files?: string[];
+  context_hint?: string;
+  constraints?: string[];
+}
+
+export interface ClaudeCodeResponse {
+  success: boolean;
+  code: string;
+  explanation: string;
+  files_affected: string[];
+  change_summary: string;
+  confidence: 'high' | 'medium' | 'low';
+}

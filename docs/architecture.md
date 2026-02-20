@@ -258,6 +258,49 @@ The app requires three environment variables set in a `.env` file:
 
 These are loaded via Vite's `import.meta.env` mechanism. The `VITE_` prefix is required for client-side exposure.
 
+## Claude AI Integration (v4)
+
+### Hybrid Architecture
+
+```
+User asks IT Agent a code question
+    │
+    ▼
+Gemini 2.0 Flash (chat routing)
+    │
+    ├── Selects tool: smart_code_task / generate_component / etc.
+    │
+    ▼
+claudeService.generateCode()
+    │
+    ├── Loads Codebase Manifest from Supabase (compressed project spec)
+    ├── Loads recent Structured Changes (delta context)
+    ├── Builds system prompt + user prompt
+    │
+    ▼
+Supabase Edge Function (claude-proxy)
+    │
+    ├── Reads ANTHROPIC_API_KEY from secrets (never exposed to browser)
+    ├── Proxies request to api.anthropic.com
+    │
+    ▼
+Claude Sonnet generates context-aware code
+    │
+    ▼
+Result returned to IT Agent → displayed in chat
+    │
+    └── Logged to structured_changes table
+```
+
+### Key Files
+- `services/claudeService.ts` — Prompt construction + API communication
+- `services/manifestService.ts` — Manifest CRUD + change log + serialization
+- `supabase/functions/claude-proxy/index.ts` — Deno edge function proxy
+- `components/settings/ManifestTab.tsx` — Manifest management UI
+
+### Fallback Strategy
+Every Claude-powered tool has a template fallback. If Claude returns an error (no credits, network failure, etc.), the tool generates a scaffold using built-in template functions. The error is surfaced to the user with clear guidance.
+
 ## Security Model
 
 1. **Supabase RLS** — All CRM tables have Row Level Security policies. Users can only see their own data (filtered by `user_id = auth.uid()`).
@@ -265,3 +308,4 @@ These are loaded via Vite's `import.meta.env` mechanism. The `VITE_` prefix is r
 3. **Client-side role gating** — `useOrg()` provides `isAdmin` / `isEditor` flags. Admin-only UI (Settings, member management) is conditionally rendered.
 4. **Auth guard** — `PrivateRoute` component redirects unauthenticated users to `/login`.
 5. **User-scoped data** — `DatabaseService` automatically injects `user_id` into every create/read operation.
+6. **Server-side API keys** — The Anthropic API key is stored as a Supabase Edge Function secret, never exposed to the client browser.

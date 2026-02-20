@@ -7,6 +7,7 @@
 - **Git**
 - A **Supabase** project (free tier works)
 - A **Google Gemini API key** (free tier available)
+- **Supabase CLI** (for Edge Functions) — `npm install -g supabase`
 
 ---
 
@@ -348,6 +349,126 @@ Serves the `dist/` folder locally for testing.
 
 ---
 
+## 7. Claude AI Setup (Optional — IT Agent Code Generation)
+
+The IT Agent can use Claude AI for context-aware code generation. This requires:
+
+### 7a. Deploy the Claude Proxy Edge Function
+
+```bash
+# Login to Supabase CLI
+npx supabase login
+
+# Link to your project
+npx supabase link --project-ref YOUR_PROJECT_REF
+
+# Deploy the edge function (no JWT required — it uses Supabase auth internally)
+npx supabase functions deploy claude-proxy --no-verify-jwt
+```
+
+### 7b. Set the Anthropic API Key
+
+```bash
+npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
+```
+
+Get your API key at [console.anthropic.com](https://console.anthropic.com). Ensure your account has credits loaded.
+
+### 7c. Store the Codebase Manifest
+
+1. Navigate to **Settings → Manifest** in the app
+2. Click **Generate & Store Manifest**
+3. Click **Lock as Baseline** to freeze the manifest as the project's source of truth
+4. Verify the Claude AI status shows "Connected"
+
+### 7d. Test It
+
+Chat with the IT Agent: "Use smart_code_task to explain the current architecture"
+
+If you see a credit balance error, add credits at [console.anthropic.com/settings/billing](https://console.anthropic.com/settings/billing).
+
+---
+
+## 8. Deploy Integration & Platform Edge Functions
+
+### 8a. Stripe Proxy (Payments)
+
+```bash
+npx supabase functions deploy stripe-proxy --no-verify-jwt
+npx supabase secrets set STRIPE_SECRET_KEY=sk_live_...
+npx supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
+```
+
+Configure in **Settings → Integrations → Stripe**. Use `sk_test_` for testing.
+
+### 8b. Email Proxy (SendGrid)
+
+```bash
+npx supabase functions deploy email-proxy --no-verify-jwt
+npx supabase secrets set SENDGRID_API_KEY=SG.xxxxx
+```
+
+Configure in **Settings → Integrations → SendGrid**. Once connected, the Sales agent's `draft_email` tool can send real emails with `send_now=true`.
+
+### 8c. Webhook Handler (Inbound Webhooks)
+
+```bash
+npx supabase functions deploy webhook-handler --no-verify-jwt
+```
+
+Webhook URL: `https://<project-ref>.supabase.co/functions/v1/webhook-handler?integration=stripe`
+
+Register this URL in your Stripe/SendGrid/Slack dashboard.
+
+### 8d. REST API
+
+```bash
+npx supabase functions deploy api --no-verify-jwt
+```
+
+API base: `https://<project-ref>.supabase.co/functions/v1/api/{entity}`
+
+Supports: `leads`, `contacts`, `orders`, `opportunities`, `accounts`, `products`
+
+Auth: `X-API-Key: rk_...` header (generate keys in Settings → System).
+
+### 8e. Tenant Provisioning
+
+```bash
+npx supabase functions deploy provision-tenant
+npx supabase secrets set SUPABASE_SERVICE_ROLE_KEY=eyJ...
+```
+
+`POST /functions/v1/provision-tenant` with `{ email, password, orgName, plan }` to create a new tenant programmatically.
+
+---
+
+## 9. SQL Migrations (v6 additions)
+
+Run in order in Supabase SQL Editor after the base tables:
+
+```bash
+# supabase/migrations/003_workflows.sql  — workflow_runs table
+# supabase/migrations/004_api_keys.sql   — api_keys, rate limits
+# supabase/migrations/005_observability.sql — agent_traces, feature flags constraint
+```
+
+Each migration is **idempotent** — safe to re-run.
+
+---
+
+## 10. Running Tests
+
+```bash
+npm test              # Run all 45 unit tests
+npm run test:watch    # Watch mode for development
+npm run test:coverage # With code coverage report
+```
+
+Tests cover: EventBus, MeetingOrchestrator (@mention parsing, routing), Integration adapters (Stripe, SendGrid, Slack), and WorkflowEngine (conditions, steps, error handling).
+
+---
+
 ## Deployment (Vercel)
 
 The live demo is deployed on **Vercel**:
@@ -373,3 +494,7 @@ The live demo is deployed on **Vercel**:
 | 403 Forbidden on insert | RLS INSERT policy blocks | Check INSERT policy uses `WITH CHECK` not `USING` |
 | Console shows repeated API calls | useEffect dependency causes re-renders | Use `useCallback` with primitive dependencies + `useRef` guard |
 | Agent says "API key not configured" | Missing VITE_GEMINI_API_KEY | Add to `.env` and restart dev server |
+| Claude returns "credit balance too low" | Anthropic account has no credits | Add credits at console.anthropic.com |
+| Claude proxy 400 error | API key invalid or expired | Re-set: `npx supabase secrets set ANTHROPIC_API_KEY=...` |
+| Claude shows "unavailable" | Edge function not deployed | Deploy: `npx supabase functions deploy claude-proxy --no-verify-jwt` |
+| GoTrueClient warnings in console | Multiple Supabase client instances | Non-critical — can be ignored |

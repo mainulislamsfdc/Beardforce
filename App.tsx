@@ -13,11 +13,7 @@ import { PrivateRoute } from './components/PrivateRoute';
 import { Layout } from './components/Layout';
 
 // Lazy load all authenticated pages for code splitting
-const DashboardPage = lazy(() => import('./components/DashboardPage'));
-const ITAgentChat = lazy(() => import('./components/ITAgentChat'));
-const SalesAgentChat = lazy(() => import('./components/SalesAgentChat'));
-const MarketingAgentChat = lazy(() => import('./components/MarketingAgentChat'));
-const CEOAgentChat = lazy(() => import('./components/CEOAgentChat'));
+const MeetingRoomPage = lazy(() => import('./components/meeting/MeetingRoomPage'));
 const VoiceAgentHub = lazy(() => import('./components/VoiceAgentHub'));
 const ApprovalQueue = lazy(() => import('./components/ApprovalQueue'));
 const LeadManagement = lazy(() => import('./components/LeadManagement'));
@@ -25,8 +21,8 @@ const SettingsPage = lazy(() => import('./components/SettingsPage'));
 const DataBrowser = lazy(() => import('./components/DataBrowser'));
 const AuditTrailPage = lazy(() => import('./components/AuditTrailPage'));
 const WorkflowsPage = lazy(() => import('./components/WorkflowsPage'));
-const TeamsMeetingRoom = lazy(() => import('./components/TeamsMeetingRoom'));
 const CodeEditorPage = lazy(() => import('./components/CodeEditorPage'));
+const HelpPage = lazy(() => import('./components/HelpPage'));
 
 function LoadingSpinner() {
   return (
@@ -55,19 +51,15 @@ function App() {
 
               {/* All authenticated routes share the Layout with sidebar */}
               <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
-                <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/it-agent" element={<ITAgentChat />} />
-                <Route path="/sales-agent" element={<SalesAgentChat />} />
-                <Route path="/marketing-agent" element={<MarketingAgentChat />} />
-                <Route path="/ceo-agent" element={<CEOAgentChat />} />
+                <Route path="/dashboard" element={<MeetingRoomPage />} />
                 <Route path="/voice" element={<VoiceAgentHub />} />
                 <Route path="/approvals" element={<ApprovalQueue />} />
                 <Route path="/leads" element={<LeadManagement />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/audit" element={<AuditTrailPage />} />
                 <Route path="/workflows" element={<WorkflowsPage />} />
-                <Route path="/meeting" element={<TeamsMeetingRoom />} />
                 <Route path="/code-editor" element={<CodeEditorPage />} />
+                <Route path="/help" element={<HelpPage />} />
                 <Route path="/database/:tableName" element={<DataBrowser />} />
               </Route>
 
