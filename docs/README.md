@@ -8,6 +8,15 @@ Each agent has its own domain expertise, a dedicated set of tools, and the abili
 
 **v6 Highlight:** Full platform stack — Integration Hub (Stripe/SendGrid/Slack), Workflow Automation with EventBus, Billing & Subscriptions, REST API, Marketplace (industry agent templates + workflow recipes), Feature Flags, Agent Observability, and 45-test CI pipeline.
 
+**v7 Highlights:**
+- **Slack-style multi-tenancy** — org invite system with shareable links, `/accept-invite` page, auto-accept on login
+- **Org-scoped CRM data** — all CRM tables migrated from `user_id` RLS → `org_id` RLS; all team members share data
+- **Gemini API proxy** — Supabase Edge Function `gemini-proxy` keeps API key server-side; `VITE_GEMINI_API_KEY` removed from browser
+- **Public marketing site** — `/` landing page, `/terms`, `/privacy`, `/register` with email confirmation
+- **Mobile-responsive layout** — sidebar becomes slide-out drawer on mobile with hamburger toggle
+- **React Error Boundaries** — agents and meeting room wrapped for graceful crash recovery
+- **Agent onboarding** — welcome messages shown on first open without API call
+
 ---
 
 ## Tech Stack

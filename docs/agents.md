@@ -2,7 +2,9 @@
 
 ## Overview
 
-BeardForce uses four specialized AI agents, each powered by **Google Gemini 2.0 Flash**. Agents use Gemini's **function calling** feature to execute real operations against the database, rather than just generating text responses.
+RunwayCRM uses four specialized AI agents, each powered by **Google Gemini 2.0 Flash**. Agents use Gemini's **function calling** feature to execute real operations against the database, rather than just generating text responses.
+
+**v7 API key handling:** The Gemini API key is no longer exposed in the browser. All Gemini requests are proxied through a **Supabase Edge Function** (`gemini-proxy`). The key is stored as a server-side secret (`GEMINI_API_KEY`) and never reaches the client.
 
 All agents follow the same architectural pattern:
 1. A `ToolDefinition[]` array defines tools with name, description, parameters, and handler function
@@ -13,19 +15,34 @@ All agents follow the same architectural pattern:
 ## Agent Architecture
 
 ```
-┌────────────────────────────────────────────┐
-│            Agent Class                      │
-│                                            │
-│  ┌──────────────┐  ┌──────────────────┐   │
-│  │ GoogleGenAI  │  │  Chat Session    │   │
-│  │ (Gemini)     │  │  (stateful)      │   │
-│  └──────┬───────┘  └────────┬─────────┘   │
-│         │                    │              │
-│  ┌──────┴────────────────────┴─────────┐   │
-│  │   Tool Definitions + Handlers       │   │
-│  │   (function calling declarations)   │   │
-│  └─────────────────────────────────────┘   │
-└────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│                    Agent Class                          │
+│                                                        │
+│  ┌──────────────────┐  ┌──────────────────┐            │
+│  │  GeminiProxy     │  │  Chat Session    │            │
+│  │  (Edge Function) │  │  (stateful)      │            │
+│  └──────────┬───────┘  └────────┬─────────┘            │
+│             │                    │                      │
+│  ┌──────────┴────────────────────┴─────────────────┐   │
+│  │         Tool Definitions + Handlers             │   │
+│  │         (function calling declarations)         │   │
+│  └─────────────────────────────────────────────────┘   │
+└────────────────────────────────────────────────────────┘
+
+User Message
+     │
+     ▼
+Agent.chat(message)
+     │
+     ▼
+POST /functions/v1/gemini-proxy   ← Supabase Edge Function
+     │  (Gemini API key server-side only)
+     ▼
+Gemini 2.0 Flash API
+     │
+     ├── Text response → return to user
+     │
+     └── Function call(s) → Agent runs handler(s) → sends results back → final text
 ```
 
 ### Function Calling Flow
@@ -157,7 +174,7 @@ Creative, data-driven marketing manager. Creates campaigns, segments audiences, 
 **Class:** `ITAgent` (instantiated per-component, receives `DatabaseService` in constructor)
 
 ### Architecture Difference
-Unlike the other three agents (which use `@google/generative-ai`), the IT Agent uses `@google/genai` (newer SDK). It also takes `DatabaseService` as a constructor parameter rather than importing the singleton directly.
+Unlike the other three agents (which use `@google/generative-ai`), the IT Agent uses `@google/genai` (newer SDK). It takes `DatabaseService` as a constructor parameter rather than importing the singleton directly. All agents route through the `gemini-proxy` Edge Function — the API key is never in the browser bundle.
 
 ### System Prompt Summary
 Expert IT manager focused on database operations, schema design, code generation, and system reliability. Always uses tools when available.
@@ -216,8 +233,10 @@ To add a new agent (e.g., a "Customer Support Agent"):
 3. Transform tools to Gemini `FunctionDeclaration[]` format
 4. Create the agent class with system instruction, chat method, and function call loop
 5. Export a singleton instance
-6. Create `components/SupportAgentChat.tsx` (follow existing chat component patterns)
-7. Add route in `App.tsx` and nav item in `Layout.tsx`
+6. Add the agent to the `agentRegistry.ts` in `components/meeting/`
+7. Add route in `App.tsx` and nav item in `Layout.tsx` if needed
+
+**Note:** The agent should not include `GEMINI_API_KEY` directly. All requests go through the `gemini-proxy` Edge Function. Deploy the proxy before testing: `supabase functions deploy gemini-proxy --no-verify-jwt`.
 
 ### Tool Definition Template
 
@@ -246,13 +265,17 @@ const myTools: ToolDefinition[] = [
 ### Agent Class Template
 
 ```typescript
+// All Gemini requests now proxy through the gemini-proxy Edge Function.
+// Do NOT pass GEMINI_API_KEY from the browser.
 export class MyAgent {
   private genAI: GoogleGenerativeAI;
   private model: any;
   private chatSession: any;
 
   constructor() {
-    this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    // The SDK is pointed at the Edge Function URL, not the Gemini API directly.
+    // See services/agents/geminiClient.ts for the proxy client setup.
+    this.genAI = new GoogleGenerativeAI('proxy'); // key handled server-side
     this.model = this.genAI.getGenerativeModel({
       model: 'gemini-2.0-flash',
       systemInstruction: `Your system prompt here...`

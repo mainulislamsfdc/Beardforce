@@ -19,14 +19,19 @@ const MANIFEST_V3: ManifestSection[] = [
     title: 'Architecture & Patterns',
     token_estimate: 400,
     content: `Stack: React 18 + TypeScript + Tailwind CSS + Vite + Supabase (PostgreSQL).
-AI: Google Gemini 2.0 Flash for 4 agents (CEO, Sales, Marketing, IT). IT Agent also uses Claude for code generation.
-State: 7 React Context providers nested: AuthProvider > OrgProvider > AgentConfigProvider > BrandingProvider > FieldConfigProvider > NotificationProvider > Router.
-Database: Adapter pattern — DatabaseAdapter (abstract) → SupabaseAdapter (impl) → DatabaseService (facade, auto-injects user_id).
-Auth: Supabase Auth with auto-org provisioning on signup. RLS on all tables scoped by user_id.
-Agents: Gemini function calling. Each agent has ToolDefinition[] with name/description/parameters/execute. IT Agent uses @google/genai (newer SDK), others use @google/generative-ai (older).
+AI: Google Gemini 2.0 Flash for 4 agents (CEO, Sales, Marketing, IT). IT Agent also uses Claude Sonnet for code generation via claude-proxy Edge Function.
+Gemini API: Key is server-side only — all agent requests proxy through gemini-proxy Supabase Edge Function (GEMINI_API_KEY secret). Never in browser.
+State: React Context providers nested: AuthProvider > OrgProvider > AgentConfigProvider > BrandingProvider > FieldConfigProvider > NotificationProvider > Router.
+Database: Adapter pattern — DatabaseAdapter (abstract) → SupabaseAdapter (impl) → DatabaseService (facade, auto-injects org_id + user_id).
+Auth: Supabase Auth. Email confirmation required. user.user_metadata.full_name stores display name. Auto-org provisioning on signup.
+Multi-tenant: Slack model — each company gets an isolated org. CRM data scoped by org_id via RLS (v7). All org members share CRM data.
+Invite system: Admin generates invite link (token in org_invites table). Invitee opens /accept-invite?token=xxx. Pending token saved to localStorage for post-login auto-accept.
+RLS: CRM tables use org_id = get_user_org_id() (SECURITY DEFINER). Org tables use separate INSERT/SELECT policies. get_user_org_id() avoids recursive RLS.
+Agents: Gemini function calling. Each agent has ToolDefinition[] with name/description/parameters/handler. IT Agent uses @google/genai (newer SDK), others use @google/generative-ai.
 White-label: AgentConfigContext (per-agent names/avatars/colors/voice), BrandingContext (app name/logo/colors), FieldConfigContext (per-entity field visibility/labels).
-Routing: react-router-dom v7, lazy-loaded routes inside PrivateRoute > Layout shell.
-Styling: Dark theme throughout — bg-gray-900 (page), bg-gray-800 (cards), bg-gray-700 (inputs), text-white (primary), text-gray-400 (secondary), border-gray-700.
+Routing: react-router-dom v7, lazy-loaded routes inside PrivateRoute > Layout shell. Public routes: /, /login, /register, /accept-invite, /terms, /privacy.
+Mobile: Layout has mobile drawer sidebar (fixed overlay, -translate-x-full → translate-x-0) and desktop collapsible sidebar. md: breakpoint splits behaviors.
+Styling: Dark theme — bg-gray-900 (page), bg-gray-800 (cards), bg-gray-700 (inputs), text-white (primary), text-gray-400 (secondary), border-gray-700. Accent: orange-500/600.
 Icons: lucide-react. Charts: recharts. CSV: papaparse. Voice: Web Speech API.`
   },
   {
@@ -34,107 +39,110 @@ Icons: lucide-react. Charts: recharts. CSV: papaparse. Voice: Web Speech API.`
     title: 'File Map',
     token_estimate: 600,
     content: `ROOT:
-App.tsx — Router + context provider nesting + lazy routes.
-types.ts — All TypeScript interfaces (User, Lead, AgentConfig, OrgBranding, FieldConfig, CodebaseManifest, StructuredChangeEntry, ClaudeCodeRequest/Response, etc).
-constants.ts — Agent color maps, empty initial state arrays.
+App.tsx — Router + context provider nesting + lazy routes. Public routes: /, /login, /register, /accept-invite, /terms, /privacy. Protected routes inside PrivateRoute > Layout.
+types.ts — All TypeScript interfaces: User, Lead, Contact, Account, Opportunity, Order, Product, Organization, OrgMember, OrgInvite, AgentConfig, OrgBranding, FieldConfig, CodebaseManifest, StructuredChangeEntry, ClaudeCodeRequest/Response, etc.
 
 CONTEXT (context/):
-AuthContext.tsx — useAuth(): user, session, signUp, signIn, signInWithProvider, signOut, resetPassword. Auto-provisions org.
-OrgContext.tsx — useOrg(): org, role, isAdmin, isEditor. Loads org_members.
+AuthContext.tsx — useAuth(): user, session, signUp(email, password, fullName), signIn, signOut, resetPassword. user.user_metadata.full_name = display name.
+OrgContext.tsx — useOrg(): org, role, isAdmin, isEditor, refresh(). Loads org_members. Calls databaseService.setOrgId(). Auto-accepts pending invite from localStorage.
 AgentConfigContext.tsx — useAgentConfig(): getAgent(id), updateAgent(). Fallback defaults if no DB rows.
 BrandingContext.tsx — useBranding(): branding, updateBranding(). Sets document.title.
 FieldConfigContext.tsx — useFieldConfig(): getFieldConfig(entity, key), getVisibleFields().
 NotificationContext.tsx — useNotifications(): notifications, unreadCount, toasts, addToast(), markAsRead().
-StoreContext.tsx — Legacy state: leads, campaigns, tickets, expenses, changeRequests.
 
 DATABASE (services/database/):
 DatabaseAdapter.ts — Abstract: CRUD, batch, schema ops (getTables, createTable, addColumn, etc), query, count, search.
 SupabaseAdapter.ts — Implements all adapter methods. Filter ops: =, !=, >, <, >=, <=, LIKE, IN.
-DatabaseService.ts — Facade. Entity methods: createLead/getLeads/etc. Auto-injects user_id. Has createSnapshot/restoreSnapshot/resetToDefault.
-index.ts — Exports databaseService singleton + initializeDatabase(userId).
+DatabaseService.ts — Facade. Entity methods: createLead/getLeads/etc. Injects org_id (RLS) + user_id (audit). setOrgId()/getOrgId() — falls back to userId if orgId not set. Has createSnapshot/restoreSnapshot/resetToDefault.
+index.ts — Exports databaseService singleton + initializeDatabase(userId, orgId?).
 
 AGENTS (services/agents/tools/):
-CEOAgent.ts — 10 tools: executive dashboard, budget review, agent monitoring, forecasting, coordination. Uses @google/generative-ai.
-SalesAgent.ts — 12 tools: lead CRUD, qualification, pipeline, orders, quotes. Email templates use dynamic orgName.
-MarketingAgent.ts — 10 tools: campaigns, audience segmentation, email sequences, ad copy. Dynamic orgName in templates.
-ITAgent.ts — 20 tools via ITAgentTools: 11 DB management, 2 data CRUD, 4 code generation, 2 snapshots, 1 performance report. Uses @google/genai.
-itAgentTools.ts — ITAgentTool interface + ITAgentTools class. All tool definitions with execute handlers.
-MeetingOrchestrator.ts — Multi-agent meetings: turn-taking, voice synthesis, agent status tracking.
+CEOAgent.ts — 10 tools. Uses @google/generative-ai.
+SalesAgent.ts — 12 tools. Lead CRUD, pipeline, quotes. Email via SendGrid integration.
+MarketingAgent.ts — 10 tools. Campaigns, segmentation, content.
+ITAgent.ts — 21 tools via itAgentTools.ts. DB management + Claude-powered code generation. Uses @google/genai.
+itAgentTools.ts — ITAgentTool interface + ITAgentTools class with all handlers.
+MeetingOrchestrator.ts — Multi-agent meetings: @mention parsing, turn-taking, voice synthesis.
 
 SERVICES (services/):
-auth/authService.ts — Supabase auth wrapper: signUp, signIn, signOut, OAuth, password reset.
-accessControl.ts — Org RBAC: createOrganization, getOrgMembers, updateMemberRole, addMember.
-agentConfigService.ts — CRUD for agent_config, org_branding, field_configs. Default configs.
+accessControl.ts — Org RBAC: createOrganization, getCurrentMembership (order by joined_at desc limit 1), getOrgMembers, updateMemberRole, addMember. Invite: createInvite(→token), getPendingInvites, cancelInvite, acceptInvite(token,userId), getInviteDetails (RPC, unauthenticated).
+agentConfigService.ts — CRUD for agent_config, org_branding, field_configs.
 notificationService.ts — createNotification, getNotifications, markAsRead, getUnreadCount.
-auditService.ts — log(action, entityType, entityId, details), getAuditLogs, logLogin, getLoginHistory.
-workflowEngine.ts — getWorkflows, createWorkflow, executeWorkflow. Actions: create_record, update_field, send_notification, log_change.
-importExport.ts — exportToCSV, exportToJSON, parseCSV via papaparse.
+auditService.ts — log(action, entityType, entityId, details), getAuditLogs, logLogin.
+workflowEngine.ts — getWorkflows, createWorkflow, executeWorkflow (event-driven steps: action/condition/agent/integration/delay).
+integrations/ — IntegrationAdapter (abstract) → StripeAdapter, SendGridAdapter, SlackAdapter.
+billingService.ts — Subscription plans (Free/Pro/Enterprise), Stripe checkout, usage metering.
 manifestService.ts — THIS FILE. Manages codebase manifest + structured change log.
-claudeService.ts — Claude API integration for intelligent code generation.
+claudeService.ts — Claude Sonnet API integration via claude-proxy Edge Function.
+
+EDGE FUNCTIONS (supabase/functions/):
+gemini-proxy — Forwards Gemini requests server-side. GEMINI_API_KEY secret.
+claude-proxy — Forwards Claude requests. ANTHROPIC_API_KEY secret.
+stripe-proxy — Stripe API proxy. STRIPE_SECRET_KEY secret.
+email-proxy — SendGrid proxy. SENDGRID_API_KEY secret.
+webhook-handler — Inbound webhooks (Stripe, SendGrid, Slack).
+api — REST API v1 for CRM entities. X-API-Key auth.
+provision-tenant — Programmatic tenant creation.
 
 COMPONENTS (components/):
-Layout.tsx — Main shell: collapsible sidebar (nav groups: Main, Agents, Management, Database), notification bell, user menu.
-LoginPage.tsx — Email/password + Google OAuth. Branded "RunwayCRM".
-RegisterPage.tsx — Registration + auto-org creation.
-DashboardPage.tsx — KPI cards (leads, pipeline, revenue), agent cards, charts (pipeline by stage, leads by source).
-CEOAgentChat.tsx / SalesAgentChat.tsx / MarketingAgentChat.tsx / ITAgentChat.tsx — Agent chat UIs. Pattern: capabilities showcase + message history + input. useRef for agent instance, recreates on config change.
-TeamsMeetingRoom.tsx — Multi-agent voice meeting. Agent selection, voice I/O, turn-taking.
-VoiceAgentHub.tsx — Single-agent voice interface with Web Speech API.
-LeadManagement.tsx — Lead CRUD with search, filtering, field config integration.
-SettingsPage.tsx — Tabs: Access, Agents, Branding, Fields, Manifest, System, Rollback.
-DataBrowser.tsx — Browse any table with sort, search, pagination, import/export.
-AuditTrailPage.tsx — Timeline view of audit_log + login_history.
-WorkflowsPage.tsx — Workflow builder: triggers, steps, enable/disable.
-CodeEditorPage.tsx — Code snippet editor with syntax analysis and version history.
+Layout.tsx — Shell: mobile drawer sidebar (hamburger/X, fixed overlay, md:hidden), desktop collapsible sidebar (md:relative). Nav groups: main (Meeting Room), Management, Database. Shows user.user_metadata.full_name || email + role badge.
+AcceptInvitePage.tsx — Public /accept-invite?token=xxx. Shows org name + role badge. Accept (logged in) or Login/Register (stores token in localStorage). Uses get_invite_details RPC (unauthenticated).
+meeting/MeetingRoomPage.tsx — KPI grid (grid-cols-2 sm:grid-cols-4), mode selector (1-on-1, team), @mention multi-agent.
+meeting/AgentChatPanel.tsx — Reusable chat panel.
+meeting/agentRegistry.ts — Agent visual config (name, color, avatar).
+meeting/createAgent.ts — Agent factory by ID.
+SettingsPage.tsx — 9 tabs (Access, Agents, Billing, Branding, Fields, Integrations, Manifest, System, Rollback). Tabs scrollable on mobile. Access tab: invite form → createInvite → clipboard link. Pending invites list with cancel.
+settings/BillingTab.tsx — Plan selector, usage meter, Stripe checkout.
+settings/IntegrationsTab.tsx — Stripe/SendGrid/Slack config cards.
+settings/ManifestTab.tsx — Manifest viewer + Refresh (re-generates) + Lock/Unlock.
+HelpPage.tsx — In-app user guide.
+DataBrowser.tsx — Browse any table: sort, search, pagination, import/export.
+LeadManagement.tsx — Lead CRUD with field config.
 ApprovalQueue.tsx — Pending change approvals.
 NotificationBell.tsx — Badge + dropdown.
-ImportModal.tsx / ExportButton.tsx — CSV/JSON import and export.
 
 AVATARS (components/avatars/):
-index.tsx — 20 inline SVG avatar components: Professional (5), Robot (5), Animal (5), Abstract (5). Speaking animation.
-AvatarRenderer.tsx — Renders by ID with size/speaking/color. Fallback to initials.
-AvatarPickerModal.tsx — Category-tabbed grid picker.
-
-SETTINGS (components/settings/):
-AgentSettingsTab.tsx — Edit agent name, title, avatar, colors, voice, personality.
-BrandingSettingsTab.tsx — Edit app name, tagline, accent color, logo.
-FieldSettingsTab.tsx — Rename/hide lead fields, customize dropdown options.`
+20 inline SVG avatars (Professional/Robot/Animal/Abstract). AvatarRenderer.tsx renders by ID. AvatarPickerModal.tsx for picking.`
   },
   {
     key: 'database_schema',
-    title: 'Database Schema (16 tables)',
+    title: 'Database Schema (14 tables + migrations)',
     token_estimate: 500,
-    content: `CRM TABLES (user_id scoped, RLS enabled):
-leads(id uuid PK, user_id, name, email, phone, company, status[new/contacted/qualified/lost], source, beard_type, interests text[], score int, assigned_to, notes, created_at, updated_at)
-contacts(id, user_id, first_name, last_name, email unique, phone, account_id FK→accounts, title, tags text[], notes, created_at, updated_at)
-accounts(id, user_id, name, industry, website, phone, billing_address jsonb, shipping_address jsonb, notes, created_at, updated_at)
-opportunities(id, user_id, name, account_id FK, stage[prospecting/qualification/proposal/negotiation/closed_won/closed_lost], amount decimal, probability int, close_date, assigned_to, notes, created_at, updated_at)
-orders(id, user_id, order_number unique, account_id FK, contact_id FK, opportunity_id FK, status[pending/processing/shipped/delivered/cancelled], total_amount decimal, items jsonb, shipping_address jsonb, notes, created_at, updated_at)
-products(id, user_id, name, category[oil/balm/wax/shampoo/conditioner/kit], description, price decimal, stock_quantity int, image_url, is_active bool, created_at, updated_at)
+    content: `CRM TABLES (org_id scoped via RLS — all org members share data):
+leads(id uuid PK, org_id FK→organizations[RLS], user_id FK→auth.users[audit], name, email, phone, company, status[new/contacted/qualified/unqualified/converted], source, beard_type, score int, notes, created_at, updated_at)
+contacts(id, org_id[RLS], user_id[audit], name, email, phone, company, title, notes, created_at, updated_at)
+accounts(id, org_id[RLS], user_id[audit], name, industry, website, phone, address, annual_revenue decimal, employee_count int, notes, created_at, updated_at)
+opportunities(id, org_id[RLS], user_id[audit], title, amount decimal, stage[prospecting/qualification/proposal/negotiation/closed_won/closed_lost], probability int, close_date, lead_id FK, contact_name, contact_email, notes, created_at, updated_at)
+orders(id, org_id[RLS], user_id[audit], order_number, status[pending/processing/shipped/delivered/cancelled], total_amount decimal, items jsonb, notes, created_at, updated_at)
+products(id, org_id[RLS], user_id[audit], name, description, price decimal, category, sku, in_stock bool, created_at, updated_at)
 
-SYSTEM TABLES:
-change_log(id, user_id, agent_name, change_type[schema/data/config/workflow/code_generation], description, before_state jsonb, after_state jsonb, status[pending/approved/rejected/completed/rolled_back], approved_by, created_at, executed_at)
+SYSTEM TABLES (user_id scoped):
+change_log(id, org_id[RLS], user_id[audit], agent_name, change_type, description, before_state jsonb, after_state jsonb, status[pending/approved/rejected], approved_by, approved_at, notes, created_at)
 ai_budget(id, user_id, month text, agent_name, request_count int, tokens_used int, estimated_cost decimal, created_at)
-database_connections(id, user_id, name, type[supabase/postgresql/mysql/sqlite], config jsonb, is_active bool, created_at, updated_at)
+database_connections(id, user_id, name, type, config jsonb, created_at)
 
-ACCESS TABLES:
-organizations(id, name, created_by, created_at, updated_at)
-org_members(id, org_id FK, user_id, role[admin/editor/viewer], email, invited_by, joined_at)
+ACCESS/MULTI-TENANT TABLES:
+organizations(id, name, created_by FK→auth.users, created_at, updated_at)
+org_members(id, org_id FK→organizations, user_id FK→auth.users, role[admin/editor/viewer], email, invited_by, joined_at)
+org_invites(id, org_id FK→organizations[CASCADE], email, role[admin/editor/viewer], token text UNIQUE[64-char hex], invited_by FK→auth.users, status[pending/accepted/cancelled], expires_at[7 days], created_at)
 
-WHITE-LABEL TABLES:
+WHITE-LABEL TABLES (org_id scoped):
 agent_config(id, org_id, agent_id[ceo/sales/marketing/it], custom_name, custom_title, avatar_id, color_primary, color_gradient, personality_prompt, voice_pitch, voice_rate, voice_name, is_active)
-org_branding(id, org_id, app_name, tagline, accent_color, logo_emoji, logo_initial)
-field_configs(id, org_id, entity, field_key, display_name, field_type[text/select/number/hidden], options text[], is_visible, sort_order)
+org_branding(id, org_id, app_name, tagline, accent_color, logo_initial)
+field_configs(id, org_id, entity, field_key, display_name, field_type, options text[], is_visible, sort_order)
 
 OTHER:
-notifications(id, user_id, title, message, type[info/success/warning/error/agent_action], source, reference_id, reference_type, read bool, created_at)
+notifications(id, user_id, title, message, type, source, reference_id, read bool, created_at)
 code_snippets(id, user_id, agent_name, title, description, code text, language, component_type, created_at)
 system_snapshots(id, user_id, label, description, snapshot_data jsonb, tables_included text[], total_rows int, created_by_agent, created_at)
-workflows(id, user_id, name, description, trigger_type[manual/on_create/on_update/on_status_change/schedule], trigger_config jsonb, steps jsonb, is_active, last_run_at, run_count)
-
-NEW TABLES (v4):
 codebase_manifest(id, user_id, org_id, version, locked bool, locked_at, sections jsonb, total_tokens int, created_at, updated_at)
-structured_changes(id, user_id, category, agent, title, description, files_affected text[], code_diff, context_summary, status, parent_id, created_at)`
+structured_changes(id, user_id, category, agent, title, description, files_affected text[], code_diff, context_summary, status, created_at)
+
+RLS HELPER (avoids infinite recursion):
+get_user_org_id() RETURNS uuid SECURITY DEFINER — SELECT org_id FROM org_members WHERE user_id = auth.uid() LIMIT 1.
+get_invite_details(token) RETURNS TABLE SECURITY DEFINER — works unauthenticated for /accept-invite page.
+
+MIGRATIONS ORDER: 001_rls_policies → 002_integrations → 003_workflows → 004_api_keys → 005_observability → 006_org_invites_and_org_scope`
   },
   {
     key: 'conventions',
@@ -142,49 +150,60 @@ structured_changes(id, user_id, category, agent, title, description, files_affec
     token_estimate: 300,
     content: `COMPONENTS:
 - Functional components with React.FC typing.
-- Export pattern: named export + default export at bottom.
+- Export pattern: named export + default export at bottom (or default only for pages).
 - Hooks at top: useAuth(), useOrg(), useAgentConfig(), useBranding(), useFieldConfig(), useNotifications().
-- DB init pattern: useEffect with initializeDatabase(user.id) before any databaseService calls.
-- Dark theme classes: page=bg-gray-900, card=bg-gray-800 border border-gray-700 rounded-lg p-4, input=bg-gray-700 border border-gray-600 rounded-lg text-white, button=bg-orange-600 hover:bg-orange-700 text-white rounded-lg.
-- Loading states: text-gray-500 centered with "Loading..." text.
-- Error handling: try/catch with showMessage('error', err.message) pattern.
+- DB init pattern: useEffect with initializeDatabase(user.id) before any databaseService calls. OrgContext sets orgId automatically — no need to pass it.
+- Dark theme: page=bg-gray-900, card=bg-gray-800 border border-gray-700 rounded-lg p-4, input=bg-gray-700 border border-gray-600 rounded-lg text-white, button-primary=bg-orange-500 hover:bg-orange-600 text-white rounded-xl.
+- Mobile-first: use md: breakpoints. Sidebar is fixed overlay on mobile, inline on desktop.
+- Loading: text-gray-500 centered. Error: try/catch with toast/showMessage('error', err.message).
 
 SERVICES:
-- DatabaseService auto-injects user_id into all queries — never pass user_id manually in service calls.
-- initializeDatabase(userId) MUST be called before any databaseService use.
+- DatabaseService auto-injects org_id (RLS) and user_id (audit) — never pass them manually.
+- initializeDatabase(userId) MUST be called before any databaseService use. OrgContext.setOrgId() called separately.
+- All CRM data is org-scoped — team members share data. Never filter by user_id in business logic.
 - Agent constructors accept optional { agentName, orgName, personality } config.
-- Module-level _orgName variable in CEO/Sales/Marketing agents for tool handler access.
-- IT Agent uses instance fields (this.agentName, etc) — different SDK pattern.
+- IT Agent uses instance fields (this.agentName) — different from module-level _orgName in other agents.
 
 AGENTS:
-- Tool definition: { name, description, parameters: { param: { type: 'string', required: true } }, execute: async (params) => result }.
-- All schema changes logged via dbService.logChange(agent, type, description, before, after).
+- Gemini API key is server-side (gemini-proxy Edge Function) — never in browser.
+- Tool definition: { name, description, parameters: { param: { type, required, description } }, handler: async (params) => result }.
+- All schema changes logged via databaseService.logChange(agent, type, description, before, after).
 - Destructive ops (drop_column) return { requiresApproval: true } instead of executing.
-- Code generation returns template strings, does not create actual files.
+- Code generation saves to code_snippets table via databaseService, returns code as string.
+
+INVITES:
+- accessControl.createInvite(orgId, email, role, invitedBy) → token string.
+- Link: window.location.origin + '/accept-invite?token=' + token — copy to clipboard.
+- AcceptInvitePage calls supabase.rpc('get_invite_details', { invite_token }) — works unauthenticated.
+- If not logged in: localStorage.setItem('pending_invite_token', token) before redirect.
+- OrgContext reads and clears pending token after login, calls acceptInvite automatically.
 
 STATE:
-- All data user_id scoped. RLS enforced server-side.
+- CRM data is org_id scoped (shared across team). RLS enforced server-side.
 - Contexts provide loading states and refresh() methods.
-- useRef + useEffect pattern for agent instances that recreate on config change.`
+- useRef + useEffect pattern for agent instances that recreate on config change.
+- useEffect dependencies: use user?.id (primitive) not user (object) to avoid infinite loops.`
   },
   {
     key: 'agent_tools',
     title: 'Agent Tool Registry',
     token_estimate: 300,
-    content: `IT AGENT (20 tools):
-DB: list_tables, get_table_schema, create_table, add_column, modify_column, drop_column(approval), create_index, analyze_table, search_records, backup_table, import_data, performance_report.
-Data: read_all_records, insert_record.
-Code: generate_component, generate_workflow, modify_component, list_code_snippets.
+    content: `IT AGENT (21 tools — uses @google/genai, DatabaseService injected via constructor):
+DB ops: list_tables, get_table_schema, create_table, add_column, modify_column, drop_column(requiresApproval), create_index, analyze_table, search_records, backup_table, import_data, performance_report, read_all_records, insert_record.
+Code gen (Claude-powered via claude-proxy): generate_component, generate_workflow, modify_component, smart_code_task, list_code_snippets.
 System: create_restore_point, list_restore_points.
 
-SALES AGENT (12 tools):
-create_lead, get_all_leads, qualify_lead, update_lead_status, create_opportunity, get_opportunities, update_opportunity_stage, create_order, get_orders, forecast_revenue, send_followup_email, generate_sales_report.
+SALES AGENT (12 tools — uses @google/generative-ai):
+create_lead, get_all_leads, qualify_lead, create_opportunity, get_pipeline, update_opportunity_stage, forecast_revenue, schedule_follow_up, draft_email(send_now→SendGrid), create_quote, track_deal, revenue_report.
 
-MARKETING AGENT (10 tools):
-create_campaign, get_campaigns, segment_audience, generate_email_sequence, analyze_campaign_performance, create_social_post, generate_ad_copy, track_lead_source, create_landing_page_brief, marketing_budget_analysis.
+MARKETING AGENT (10 tools — uses @google/generative-ai):
+create_campaign, segment_audience, draft_marketing_email, schedule_social_post, create_lead_magnet, analyze_campaign_performance, create_ab_test, optimize_landing_page, plan_content_calendar, integrate_google_ads.
 
-CEO AGENT (10 tools):
-generate_executive_dashboard, monitor_agent_activity, review_budget_allocation, performance_analytics, strategic_recommendations, approve_budget_request, coordinate_agents, generate_report, risk_assessment, forecast_business_outcomes.`
+CEO AGENT (10 tools — uses @google/generative-ai):
+generate_executive_dashboard, monitor_agent_activity, review_budget_status, coordinate_agents, set_goals_and_kpis, approve_major_decision, system_health_check, generate_strategic_report, allocate_resources, performance_analytics.
+
+MEETING ORCHESTRATOR:
+MeetingOrchestrator.ts — Parses @mentions, routes messages to correct agent, manages turn-taking and voice synthesis for team meetings.`
   }
 ];
 
@@ -222,7 +241,7 @@ export const manifestService = {
     const manifest: Omit<CodebaseManifest, 'id' | 'created_at' | 'updated_at'> = {
       user_id: userId,
       org_id: orgId,
-      version: '3.0',
+      version: '4.0',
       locked: false,
       locked_at: null,
       sections,

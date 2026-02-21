@@ -166,6 +166,18 @@ export interface OrgMember {
   joined_at: string;
 }
 
+export interface OrgInvite {
+  id: string;
+  org_id: string;
+  email: string;
+  role: OrgRole;
+  token: string;
+  invited_by: string;
+  status: 'pending' | 'accepted' | 'cancelled';
+  expires_at: string;
+  created_at: string;
+}
+
 // --- Code Generation ---
 
 export interface CodeSnippet {

@@ -7,6 +7,7 @@ import { DatabaseAdapter, QueryFilter } from './DatabaseAdapter';
 export class DatabaseService {
   private adapter: DatabaseAdapter;
   private userId: string | null = null;
+  private orgId: string | null = null;
 
   constructor(adapter: DatabaseAdapter) {
     this.adapter = adapter;
@@ -19,6 +20,15 @@ export class DatabaseService {
   getUserId(): string {
     if (!this.userId) throw new Error('User ID not set');
     return this.userId;
+  }
+
+  setOrgId(orgId: string) {
+    this.orgId = orgId;
+  }
+
+  /** Returns orgId if set, falls back to userId for solo users without an org yet. */
+  getOrgId(): string {
+    return this.orgId ?? this.getUserId();
   }
 
   async connect(): Promise<boolean> {
@@ -37,21 +47,20 @@ export class DatabaseService {
     this.adapter = adapter;
   }
 
-  // Convenience methods that automatically add user_id
-  async createLead(data: Omit<any, 'user_id' | 'id'>): Promise<any> {
+  // Convenience methods — inject both user_id (audit) and org_id (RLS + sharing)
+  async createLead(data: Omit<any, 'user_id' | 'org_id' | 'id'>): Promise<any> {
     return await this.adapter.create('leads', {
       ...data,
-      user_id: this.getUserId()
+      user_id: this.getUserId(),
+      org_id: this.getOrgId(),
     });
   }
 
   async getLeads(filters?: QueryFilter[]): Promise<any[]> {
-    const userFilter: QueryFilter = {
-      column: 'user_id',
-      operator: '=',
-      value: this.getUserId()
-    };
-    return await this.adapter.readAll('leads', [...(filters || []), userFilter]);
+    return await this.adapter.readAll('leads', [
+      ...(filters || []),
+      { column: 'org_id', operator: '=', value: this.getOrgId() },
+    ]);
   }
 
   async updateLead(id: string, data: any): Promise<any> {
@@ -62,59 +71,68 @@ export class DatabaseService {
     return await this.adapter.delete('leads', id);
   }
 
-  // Similar convenience methods for other entities
   async createContact(data: any): Promise<any> {
-    return await this.adapter.create('contacts', { ...data, user_id: this.getUserId() });
+    return await this.adapter.create('contacts', {
+      ...data, user_id: this.getUserId(), org_id: this.getOrgId(),
+    });
   }
 
   async getContacts(filters?: QueryFilter[]): Promise<any[]> {
     return await this.adapter.readAll('contacts', [
       ...(filters || []),
-      { column: 'user_id', operator: '=', value: this.getUserId() }
+      { column: 'org_id', operator: '=', value: this.getOrgId() },
     ]);
   }
 
   async createAccount(data: any): Promise<any> {
-    return await this.adapter.create('accounts', { ...data, user_id: this.getUserId() });
+    return await this.adapter.create('accounts', {
+      ...data, user_id: this.getUserId(), org_id: this.getOrgId(),
+    });
   }
 
   async getAccounts(filters?: QueryFilter[]): Promise<any[]> {
     return await this.adapter.readAll('accounts', [
       ...(filters || []),
-      { column: 'user_id', operator: '=', value: this.getUserId() }
+      { column: 'org_id', operator: '=', value: this.getOrgId() },
     ]);
   }
 
   async createOpportunity(data: any): Promise<any> {
-    return await this.adapter.create('opportunities', { ...data, user_id: this.getUserId() });
+    return await this.adapter.create('opportunities', {
+      ...data, user_id: this.getUserId(), org_id: this.getOrgId(),
+    });
   }
 
   async getOpportunities(filters?: QueryFilter[]): Promise<any[]> {
     return await this.adapter.readAll('opportunities', [
       ...(filters || []),
-      { column: 'user_id', operator: '=', value: this.getUserId() }
+      { column: 'org_id', operator: '=', value: this.getOrgId() },
     ]);
   }
 
   async createOrder(data: any): Promise<any> {
-    return await this.adapter.create('orders', { ...data, user_id: this.getUserId() });
+    return await this.adapter.create('orders', {
+      ...data, user_id: this.getUserId(), org_id: this.getOrgId(),
+    });
   }
 
   async getOrders(filters?: QueryFilter[]): Promise<any[]> {
     return await this.adapter.readAll('orders', [
       ...(filters || []),
-      { column: 'user_id', operator: '=', value: this.getUserId() }
+      { column: 'org_id', operator: '=', value: this.getOrgId() },
     ]);
   }
 
   async createProduct(data: any): Promise<any> {
-    return await this.adapter.create('products', { ...data, user_id: this.getUserId() });
+    return await this.adapter.create('products', {
+      ...data, user_id: this.getUserId(), org_id: this.getOrgId(),
+    });
   }
 
   async getProducts(filters?: QueryFilter[]): Promise<any[]> {
     return await this.adapter.readAll('products', [
       ...(filters || []),
-      { column: 'user_id', operator: '=', value: this.getUserId() }
+      { column: 'org_id', operator: '=', value: this.getOrgId() },
     ]);
   }
 
@@ -122,6 +140,7 @@ export class DatabaseService {
   async logChange(agentName: string, changeType: string, description: string, beforeState?: any, afterState?: any): Promise<any> {
     return await this.adapter.create('change_log', {
       user_id: this.getUserId(),
+      org_id: this.getOrgId(),
       agent_name: agentName,
       change_type: changeType,
       description,
@@ -134,7 +153,7 @@ export class DatabaseService {
   async getChangeLogs(filters?: QueryFilter[]): Promise<any[]> {
     return await this.adapter.readAll('change_log', [
       ...(filters || []),
-      { column: 'user_id', operator: '=', value: this.getUserId() }
+      { column: 'org_id', operator: '=', value: this.getOrgId() },
     ]);
   }
 

@@ -1,5 +1,6 @@
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { initAppearance } from './components/settings/AppearanceTab';
 import { AuthProvider } from './context/AuthContext';
 import { OrgProvider } from './context/OrgContext';
 import { NotificationProvider } from './context/NotificationContext';
@@ -13,6 +14,8 @@ import RegisterPage from './components/RegisterPage';
 import LandingPage from './components/LandingPage';
 import TermsPage from './components/TermsPage';
 import PrivacyPage from './components/PrivacyPage';
+import AcceptInvitePage from './components/AcceptInvitePage';
+import ContactPage from './components/ContactPage';
 import { PrivateRoute } from './components/PrivateRoute';
 import { Layout } from './components/Layout';
 
@@ -27,6 +30,9 @@ const AuditTrailPage = lazy(() => import('./components/AuditTrailPage'));
 const WorkflowsPage = lazy(() => import('./components/WorkflowsPage'));
 const CodeEditorPage = lazy(() => import('./components/CodeEditorPage'));
 const HelpPage = lazy(() => import('./components/HelpPage'));
+
+// Apply saved appearance before first paint (synchronous)
+initAppearance();
 
 function LoadingSpinner() {
   return (
@@ -56,6 +62,8 @@ function App() {
               <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/accept-invite" element={<AcceptInvitePage />} />
+              <Route path="/contact" element={<ContactPage />} />
 
               {/* ── Authenticated routes (Layout with sidebar) ── */}
               <Route element={<PrivateRoute><Layout /></PrivateRoute>}>

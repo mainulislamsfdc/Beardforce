@@ -137,7 +137,7 @@ const ManifestTab: React.FC = () => {
                 </button>
               )
             ) : null}
-            <button onClick={manifest ? loadData : handleGenerate} disabled={actionLoading} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700 transition disabled:opacity-50">
+            <button onClick={handleGenerate} disabled={actionLoading} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700 transition disabled:opacity-50">
               {manifest ? <RefreshCw size={14} /> : <Zap size={14} />}
               {actionLoading ? 'Working...' : manifest ? 'Refresh' : 'Generate & Store'}
             </button>

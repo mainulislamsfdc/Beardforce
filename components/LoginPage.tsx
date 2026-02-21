@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import RunwayLogo from './RunwayLogo';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -70,7 +71,9 @@ export default function LoginPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-900 py-12 px-4">
         <div className="max-w-md w-full space-y-8 bg-gray-800 p-8 rounded-xl shadow-lg border border-gray-700">
           <div className="text-center">
-            <div className="text-5xl mb-4">🔑</div>
+            <div className="flex justify-center mb-4">
+              <RunwayLogo size={56} showText={false} />
+            </div>
             <h2 className="text-3xl font-bold text-white">Reset Password</h2>
             <p className="mt-2 text-sm text-gray-400">
               Enter your email and we'll send you a reset link
@@ -125,7 +128,9 @@ export default function LoginPage() {
       <div className="max-w-md w-full space-y-8 bg-gray-800 p-8 rounded-xl shadow-lg border border-gray-700">
         {/* Header */}
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl flex items-center justify-center text-3xl font-bold text-white shadow-lg">R</div>
+          <div className="flex justify-center mb-4">
+            <RunwayLogo size={64} showText={false} />
+          </div>
           <h2 className="text-3xl font-bold text-white">RunwayCRM</h2>
           <p className="mt-2 text-sm text-gray-400">
             Sign in to your account

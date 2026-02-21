@@ -172,20 +172,24 @@ BEGIN
       EXECUTE format('DROP POLICY IF EXISTS "tenant_insert_%s" ON public.%I;', tbl, tbl);
       EXECUTE format('DROP POLICY IF EXISTS "tenant_update_%s" ON public.%I;', tbl, tbl);
 
+      -- These tables are org-scoped (org_id column), not user-scoped
       EXECUTE format(
-        'CREATE POLICY "tenant_select_%s" ON public.%I FOR SELECT USING (user_id = auth.uid());',
+        'CREATE POLICY "tenant_select_%s" ON public.%I FOR SELECT USING (org_id = public.get_user_org_id());',
         tbl, tbl
       );
       EXECUTE format(
-        'CREATE POLICY "tenant_insert_%s" ON public.%I FOR INSERT WITH CHECK (user_id = auth.uid());',
+        'CREATE POLICY "tenant_insert_%s" ON public.%I FOR INSERT WITH CHECK (org_id = public.get_user_org_id());',
         tbl, tbl
       );
       EXECUTE format(
-        'CREATE POLICY "tenant_update_%s" ON public.%I FOR UPDATE USING (user_id = auth.uid());',
+        'CREATE POLICY "tenant_update_%s" ON public.%I FOR UPDATE USING (org_id = public.get_user_org_id());',
         tbl, tbl
       );
-    EXCEPTION WHEN undefined_table THEN
-      RAISE NOTICE 'Table % does not exist yet, skipping RLS.', tbl;
+    EXCEPTION
+      WHEN undefined_table THEN
+        RAISE NOTICE 'Table % does not exist yet, skipping RLS.', tbl;
+      WHEN undefined_column THEN
+        RAISE NOTICE 'Table % has unexpected schema, skipping RLS.', tbl;
     END;
   END LOOP;
 END $$;

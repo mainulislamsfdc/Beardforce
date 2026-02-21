@@ -48,7 +48,7 @@ DatabaseAdapter (abstract)
     └── (SQLiteAdapter)  ← future
 
 DatabaseService (facade)
-    └── wraps any adapter, adds user_id injection + business logic
+    └── wraps any adapter, adds org_id + user_id injection + business logic
 ```
 
 **Key file:** `services/database/DatabaseAdapter.ts`
@@ -56,11 +56,44 @@ DatabaseService (facade)
 ### 2. Facade Pattern — DatabaseService
 
 Components never talk to the adapter directly. The `DatabaseService` class wraps the adapter with:
-- **Automatic `user_id` injection** — every query is scoped to the current user
+- **Automatic `org_id` injection** — every CRM query is scoped to the current org (team-shared); `user_id` also injected for audit trail
+- **Automatic `user_id` injection** — system tables (ai_budget, snapshots) remain user-scoped
 - **Entity-specific methods** — `createLead()`, `getContacts()`, etc.
 - **Business logic** — AI budget tracking, snapshot/restore, change logging, system config
+- `setOrgId(orgId)` called from `OrgContext` after org loads; `getOrgId()` falls back to `userId` for solo users
 
 **Key file:** `services/database/DatabaseService.ts`
+
+### 3a. Multi-Tenancy Model (Slack-style)
+
+Every company that signs up gets its own isolated workspace:
+
+```
+User signs up
+  └── Auto-provisioned Organization created (via OrgContext)
+  └── User added to org_members as admin
+  └── All CRM data tagged with org_id (via RLS)
+
+Admin invites teammate
+  └── org_invites record created (token = 32 random bytes)
+  └── Shareable link: /accept-invite?token=xxx
+  └── Invitee visits link (no login required to view)
+       ├── Already logged in → one-click Accept → joined org
+       └── Not logged in → stores token in localStorage
+                         → redirects to /login or /register
+                         → after login, OrgContext auto-accepts
+
+Teammate now in same org
+  └── get_user_org_id() returns same org_id
+  └── RLS policies filter all CRM tables to that org
+  └── All team members see shared leads, contacts, etc.
+```
+
+**Key files:**
+- `services/accessControl.ts` — `createInvite`, `acceptInvite`, `getPendingInvites`
+- `context/OrgContext.tsx` — auto-provisioning + pending invite check
+- `components/AcceptInvitePage.tsx` — public invite acceptance page
+- `supabase/migrations/006_org_invites_and_org_scope.sql` — table + RLS
 
 ### 3. Context API — Global State
 

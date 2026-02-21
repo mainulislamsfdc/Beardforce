@@ -1,22 +1,25 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
-import { Users, CheckSquare, Mic, LogOut, LayoutDashboard, PanelLeftClose, PanelLeftOpen, Settings, Table2, ChevronDown, ChevronRight, Shield, GitBranch, Code2, HelpCircle } from 'lucide-react';
+import { Users, CheckSquare, Mic, LogOut, LayoutDashboard, PanelLeftClose, PanelLeftOpen, Settings, Table2, ChevronDown, ChevronRight, Shield, GitBranch, Code2, HelpCircle, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useOrg } from '../context/OrgContext';
 import { useBranding } from '../context/BrandingContext';
 import NotificationBell from './NotificationBell';
 
 export const Layout: React.FC = () => {
+  // Desktop: sidebar collapsed/expanded. Mobile: drawer open/closed.
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [dbSectionOpen, setDbSectionOpen] = useState(false);
   const [mgmtSectionOpen, setMgmtSectionOpen] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { role, isAdmin } = useOrg();
   const { branding } = useBranding();
 
   const handleSignOut = async () => {
+    await signOut();
     navigate('/login');
   };
 
@@ -50,11 +53,29 @@ export const Layout: React.FC = () => {
 
   const roleBadgeColor = role === 'admin' ? 'text-orange-400' : role === 'editor' ? 'text-blue-400' : 'text-gray-400';
 
+  // Close mobile drawer when navigating
+  const handleNavClick = () => setMobileOpen(false);
+
   return (
-    <div className="flex h-screen bg-gray-900">
-      {/* Sidebar */}
+    <div className="flex h-screen bg-gray-900 overflow-hidden">
+      {/* Mobile backdrop */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-40 md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* Sidebar — mobile: fixed overlay drawer; desktop: inline collapsible */}
       <div
-        className={`${sidebarOpen ? 'w-64' : 'w-0'} bg-gray-800 border-r border-gray-700 flex flex-col transition-all duration-300 overflow-hidden`}
+        className={`
+          fixed inset-y-0 left-0 z-50 flex flex-col bg-gray-800 border-r border-gray-700
+          transition-transform duration-300
+          md:relative md:z-auto md:translate-x-0
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
+          ${sidebarOpen ? 'md:w-64' : 'md:w-0 md:overflow-hidden'}
+          w-72
+        `}
       >
         {/* Logo */}
         <div className="p-4 border-b border-gray-700 flex items-center justify-between min-w-[240px]">
@@ -64,6 +85,13 @@ export const Layout: React.FC = () => {
             </div>
             <span className="text-white font-semibold">{branding.app_name || 'RunwayCRM'}</span>
           </div>
+          {/* Mobile close button */}
+          <button
+            onClick={() => setMobileOpen(false)}
+            className="md:hidden p-1 text-gray-400 hover:text-white"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         {/* Navigation */}
@@ -99,6 +127,7 @@ export const Layout: React.FC = () => {
                     <Link
                       key={item.path}
                       to={item.path}
+                      onClick={handleNavClick}
                       className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${
                         group.section === 'main' ? '' : 'rounded'
                       } ${
@@ -123,10 +152,12 @@ export const Layout: React.FC = () => {
         <div className="border-t border-gray-700 p-4 min-w-[240px]">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold">
-              {user?.email?.charAt(0).toUpperCase() || 'U'}
+              {(user?.user_metadata?.full_name || user?.email)?.charAt(0).toUpperCase() || 'U'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-white text-sm font-medium truncate">{user?.email || 'User'}</p>
+              <p className="text-white text-sm font-medium truncate">
+                {user?.user_metadata?.full_name || user?.email || 'User'}
+              </p>
               <p className={`text-xs font-medium ${roleBadgeColor}`}>{role?.toUpperCase() || 'MEMBER'}</p>
             </div>
           </div>
@@ -140,13 +171,21 @@ export const Layout: React.FC = () => {
         </div>
       </div>
 
-      {/* Toggle Button + Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar with toggle */}
+      {/* Main content area */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {/* Top bar */}
         <div className="bg-gray-800 border-b border-gray-700 px-4 py-2 flex items-center gap-3">
+          {/* Mobile hamburger */}
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="md:hidden p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition"
+          >
+            <Menu size={20} />
+          </button>
+          {/* Desktop panel toggle */}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition"
+            className="hidden md:block p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition"
             title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
           >
             {sidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}

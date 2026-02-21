@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Send, ChevronDown, ChevronUp, Loader2, Trash2 } from 'lucide-react';
 import { initializeDatabase } from '../../services/database';
 import { useAuth } from '../../context/AuthContext';
 import { useAgentConfig } from '../../context/AgentConfigContext';
@@ -36,10 +36,13 @@ const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agentId }) => {
   const { branding } = useBranding();
   const agentCfg = getAgent(agentId);
 
+  const storageKey = user?.id ? `runwaycrm_chat_${user.id}_${agentId}` : null;
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [dbInitialized, setDbInitialized] = useState(false);
+  const [historyRestored, setHistoryRestored] = useState(false);
   const [showCapabilities, setShowCapabilities] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -55,6 +58,49 @@ const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agentId }) => {
     });
   }, [agentId, agentCfg.custom_name, branding.app_name, agentCfg.personality_prompt]);
 
+  // Restore chat history from localStorage on mount
+  useEffect(() => {
+    if (!storageKey || historyRestored) return;
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed: ChatMessage[] = JSON.parse(saved).map((m: any) => ({
+          ...m,
+          timestamp: new Date(m.timestamp),
+        }));
+        if (parsed.length > 0) {
+          setMessages(parsed);
+          setHistoryRestored(true);
+          return;
+        }
+      }
+    } catch {
+      // Ignore corrupt storage
+    }
+    setHistoryRestored(true); // Mark restored even if nothing found
+  }, [storageKey, historyRestored]);
+
+  // Persist messages to localStorage whenever they change
+  useEffect(() => {
+    if (!storageKey || messages.length === 0) return;
+    try {
+      // Keep last 100 messages to avoid unbounded growth
+      localStorage.setItem(storageKey, JSON.stringify(messages.slice(-100)));
+    } catch {
+      // Storage full — ignore
+    }
+  }, [messages, storageKey]);
+
+  // Clear history handler
+  const handleClearHistory = useCallback(() => {
+    if (storageKey) localStorage.removeItem(storageKey);
+    setMessages([{
+      role: 'agent',
+      content: WELCOME_MESSAGES[agentId],
+      timestamp: new Date(),
+    }]);
+  }, [storageKey, agentId]);
+
   // Initialize database + inject welcome message on first open
   useEffect(() => {
     const initDB = async () => {
@@ -62,19 +108,20 @@ const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agentId }) => {
         try {
           await initializeDatabase(user.id);
           setDbInitialized(true);
-          // Show static welcome message — no API call needed
-          setMessages([{
-            role: 'agent',
-            content: WELCOME_MESSAGES[agentId],
-            timestamp: new Date(),
-          }]);
+          // Only show welcome if no history was restored
+          setMessages(prev => {
+            if (prev.length === 0) {
+              return [{ role: 'agent', content: WELCOME_MESSAGES[agentId], timestamp: new Date() }];
+            }
+            return prev;
+          });
         } catch (error) {
           console.error('Database connection failed:', error);
-          setMessages([{
+          setMessages(prev => prev.length === 0 ? [{
             role: 'agent',
             content: 'Failed to connect to database. Please check your Supabase configuration.',
             timestamp: new Date(),
-          }]);
+          }] : prev);
         }
       }
     };
@@ -133,13 +180,22 @@ const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agentId }) => {
               <p className="text-white/70 text-xs">{visual.description}</p>
             </div>
           </div>
-          <button
-            onClick={() => setShowCapabilities(!showCapabilities)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition text-white text-sm"
-          >
-            {visual.capabilities.length} capabilities
-            {showCapabilities ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleClearHistory}
+              title="Clear chat history"
+              className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition text-white/70 hover:text-white"
+            >
+              <Trash2 size={14} />
+            </button>
+            <button
+              onClick={() => setShowCapabilities(!showCapabilities)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition text-white text-sm"
+            >
+              {visual.capabilities.length} capabilities
+              {showCapabilities ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+          </div>
         </div>
 
         {/* Capabilities dropdown */}

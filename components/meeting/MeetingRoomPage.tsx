@@ -305,7 +305,7 @@ export default function MeetingRoomPage() {
           </div>
 
           {/* KPI Row */}
-          <div className="grid grid-cols-4 gap-3 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
             {kpiLoading ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="bg-gray-800 rounded-xl p-4 border border-gray-700 animate-pulse">

@@ -1,9 +1,14 @@
-import React from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Bot, Users, Zap, BarChart3, CheckCircle, ArrowRight,
-  MessageSquare, Database, Plug, Globe, Star
+  Bot, Zap, CheckCircle, ArrowRight,
+  MessageSquare, Database, Plug, Globe, Star,
+  PlayCircle, X,
 } from 'lucide-react';
+import RunwayLogo from './RunwayLogo';
+
+const DEMO_VIDEO_URL =
+  'https://4cy8gd5pemhracns.public.blob.vercel-storage.com/RunwayCRM%20%E2%80%94%20The%20AI%20CRM%20That%20Runs%20Your%20Business_720p_caption.mp4';
 
 // ── Pricing tiers ─────────────────────────────────────────────────────────────
 const plans = [
@@ -114,20 +119,45 @@ const testimonials = [
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function LandingPage() {
+  const [showVideo, setShowVideo] = useState(false);
+
   return (
     <div className="min-h-screen bg-gray-950 text-white font-sans">
+
+      {/* ── Video modal ───────────────────────────────────────────────────── */}
+      {showVideo && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
+          onClick={() => setShowVideo(false)}
+        >
+          <div
+            className="relative w-full max-w-4xl rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowVideo(false)}
+              className="absolute top-3 right-3 z-10 w-8 h-8 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center text-white transition"
+              aria-label="Close video"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <video
+              src={DEMO_VIDEO_URL}
+              controls
+              autoPlay
+              className="w-full aspect-video bg-black"
+            />
+          </div>
+        </div>
+      )}
       {/* ── Nav ──────────────────────────────────────────────────────────── */}
       <nav className="border-b border-gray-800 px-6 py-4 flex items-center justify-between max-w-7xl mx-auto">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
-            <BarChart3 className="w-5 h-5 text-white" />
-          </div>
-          <span className="text-lg font-bold tracking-tight">RunwayCRM</span>
-        </div>
+        <RunwayLogo size={36} showText textClassName="text-white font-bold text-lg tracking-tight" />
         <div className="hidden md:flex items-center gap-8 text-sm text-gray-400">
           <a href="#features" className="hover:text-white transition-colors">Features</a>
           <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
           <a href="#testimonials" className="hover:text-white transition-colors">Reviews</a>
+          <Link to="/contact" className="hover:text-white transition-colors">Contact</Link>
         </div>
         <div className="flex items-center gap-3">
           <Link to="/login" className="text-sm text-gray-400 hover:text-white transition-colors">
@@ -142,41 +172,64 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* ── Hero ─────────────────────────────────────────────────────────── */}
-      <section className="max-w-7xl mx-auto px-6 pt-20 pb-24 text-center">
-        <div className="inline-flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-medium px-3 py-1.5 rounded-full mb-6">
-          <Star className="w-3 h-3" />
-          AI-powered · Multi-agent · Production ready
-        </div>
-        <h1 className="text-5xl md:text-6xl font-extrabold leading-tight tracking-tight mb-6">
-          Your AI Executive Team,<br />
-          <span className="text-orange-500">Ready to Work.</span>
-        </h1>
-        <p className="text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-          RunwayCRM gives you four specialized AI agents — CEO, Sales, Marketing, and IT —
-          that collaborate in real time to manage your entire business pipeline. No menu-driven CRM.
-          Just natural language.
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link
-            to="/register"
-            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-8 py-3.5 rounded-xl font-semibold text-base transition-colors shadow-lg shadow-orange-500/25"
-          >
-            Start free — no card needed
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-          <a
-            href="https://beardforce.vercel.app"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 border border-gray-700 hover:border-gray-500 text-gray-300 px-8 py-3.5 rounded-xl font-medium text-base transition-colors"
-          >
-            View live demo
-          </a>
-        </div>
+      {/* ── Hero — full-width GIF background ─────────────────────────────── */}
+      <section className="relative w-full overflow-hidden" style={{ minHeight: '560px' }}>
 
-        {/* Mock screenshot placeholder */}
-        <div className="mt-16 rounded-2xl border border-gray-800 bg-gray-900 p-1 shadow-2xl max-w-5xl mx-auto">
+        {/* GIF fills the entire hero */}
+        <img
+          src="https://media.giphy.com/media/l49JNg634XknnaCvC/giphy.gif"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover object-center"
+          aria-hidden="true"
+        />
+
+        {/* Layered overlay: strong at top (blends with nav) + bottom (blends with page),
+            lighter in the middle so the GIF shows through */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(to bottom, rgba(3,3,3,0.82) 0%, rgba(3,3,3,0.42) 28%, rgba(3,3,3,0.52) 65%, rgba(3,3,3,0.92) 100%)',
+          }}
+        />
+
+        {/* Hero content — sits on top of the GIF */}
+        <div className="relative z-10 max-w-7xl mx-auto px-6 pt-24 pb-20 text-center">
+          <div className="inline-flex items-center gap-2 bg-orange-500/15 border border-orange-500/40 text-orange-400 text-xs font-medium px-3 py-1.5 rounded-full mb-6 backdrop-blur-sm">
+            <Star className="w-3 h-3" />
+            AI-powered · Multi-agent · Production ready
+          </div>
+          <h1 className="text-5xl md:text-6xl font-extrabold leading-tight tracking-tight mb-6 drop-shadow-lg">
+            Every Business Deserves<br />
+            <span className="text-orange-500">a Runway to Take Off.</span>
+          </h1>
+          <p className="text-xl text-gray-300 max-w-2xl mx-auto mb-10 leading-relaxed drop-shadow">
+            RunwayCRM puts four AI agents — CEO, Sales, Marketing, and IT — on your team.
+            They collaborate in real time to manage your pipeline, automate your workflows,
+            and help your business reach cruising altitude. No complexity. Just results.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link
+              to="/register"
+              className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-8 py-3.5 rounded-xl font-semibold text-base transition-colors shadow-lg shadow-orange-500/30"
+            >
+              Start free — no card needed
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+            <button
+              onClick={() => setShowVideo(true)}
+              className="flex items-center gap-2 border border-white/20 hover:border-orange-400/60 bg-black/30 backdrop-blur-sm text-white hover:text-orange-300 px-8 py-3.5 rounded-xl font-medium text-base transition-colors"
+            >
+              <PlayCircle className="w-5 h-5 text-orange-400" />
+              Watch demo
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ── App preview ──────────────────────────────────────────────────── */}
+      <section className="max-w-7xl mx-auto px-6 pb-16 -mt-6 relative z-10">
+        <div className="rounded-2xl border border-gray-800 bg-gray-900 p-1 shadow-2xl">
           <div className="rounded-xl bg-gray-900 p-6 flex gap-4 h-64 overflow-hidden">
             {/* Sidebar mock */}
             <div className="w-48 shrink-0 space-y-1">
@@ -320,10 +373,11 @@ export default function LandingPage() {
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       <footer className="border-t border-gray-800 px-6 py-8 text-center text-sm text-gray-500">
-        <div className="flex items-center justify-center gap-6 mb-4">
+        <div className="flex items-center justify-center gap-6 mb-4 flex-wrap">
           <Link to="/terms" className="hover:text-gray-300 transition-colors">Terms of Service</Link>
           <Link to="/privacy" className="hover:text-gray-300 transition-colors">Privacy Policy</Link>
-          <a href="mailto:support@runwaycrm.com" className="hover:text-gray-300 transition-colors">Support</a>
+          <Link to="/contact" className="hover:text-gray-300 transition-colors">Contact</Link>
+          <a href="mailto:beardforcecare@gmail.com" className="hover:text-gray-300 transition-colors">Support</a>
         </div>
         <p>© {new Date().getFullYear()} RunwayCRM. All rights reserved.</p>
       </footer>

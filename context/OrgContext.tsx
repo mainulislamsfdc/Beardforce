@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { accessControl } from '../services/accessControl';
+import { databaseService } from '../services/database';
 import type { OrgRole, Organization, OrgMember } from '../types';
 
 interface OrgContextType {
@@ -44,11 +45,26 @@ export const OrgProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
+      // Check for a pending invite token stored before redirect to login/register
+      const pendingToken = localStorage.getItem('pending_invite_token');
+      if (pendingToken && user?.id) {
+        localStorage.removeItem('pending_invite_token');
+        try {
+          await accessControl.acceptInvite(pendingToken, user.id);
+          // Reload membership — user is now in the invited org
+          m = await accessControl.getCurrentMembership(user.id);
+        } catch (e) {
+          console.warn('Auto-accept invite failed:', e);
+        }
+      }
+
       setMembership(m);
 
       if (m?.org_id) {
         const o = await accessControl.getOrganization(m.org_id);
         setOrg(o);
+        // Make DatabaseService aware of the org so new records are tagged org_id
+        databaseService.setOrgId(m.org_id);
       } else {
         setOrg(null);
       }
@@ -61,7 +77,7 @@ export const OrgProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     loadMembership();
-  }, [user]);
+  }, [user?.id]); // primitive id — avoids re-firing on token refresh (user object ref changes)
 
   const role = membership?.role ?? null;
 

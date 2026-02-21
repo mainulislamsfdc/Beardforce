@@ -11,9 +11,10 @@ import FieldSettingsTab from './settings/FieldSettingsTab';
 import ManifestTab from './settings/ManifestTab';
 import IntegrationsTab from './settings/IntegrationsTab';
 import BillingTab from './settings/BillingTab';
-import type { OrgRole, OrgMember } from '../types';
+import AppearanceTab from './settings/AppearanceTab';
+import type { OrgRole, OrgMember, OrgInvite } from '../types';
 
-type Tab = 'access' | 'agents' | 'billing' | 'branding' | 'fields' | 'integrations' | 'manifest' | 'system' | 'rollback';
+type Tab = 'access' | 'agents' | 'appearance' | 'billing' | 'branding' | 'fields' | 'integrations' | 'manifest' | 'system' | 'rollback';
 
 export const SettingsPage: React.FC = () => {
   const { user } = useAuth();
@@ -25,8 +26,10 @@ export const SettingsPage: React.FC = () => {
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<OrgRole>('viewer');
+  const [inviteRole, setInviteRole] = useState<OrgRole>('editor');
   const [showInvite, setShowInvite] = useState(false);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [pendingInvites, setPendingInvites] = useState<OrgInvite[]>([]);
 
   // Snapshot state
   const [snapshots, setSnapshots] = useState<any[]>([]);
@@ -59,7 +62,10 @@ export const SettingsPage: React.FC = () => {
   }, [user, dbInitialized]);
 
   useEffect(() => {
-    if (org?.id) loadMembers();
+    if (org?.id) {
+      loadMembers();
+      loadPendingInvites();
+    }
   }, [org?.id]);
 
   useEffect(() => {
@@ -82,6 +88,43 @@ export const SettingsPage: React.FC = () => {
       showMessage('error', err.message);
     } finally {
       setMembersLoading(false);
+    }
+  };
+
+  const loadPendingInvites = async () => {
+    if (!org?.id) return;
+    try {
+      const invites = await accessControl.getPendingInvites(org.id);
+      setPendingInvites(invites);
+    } catch (err) {
+      console.error('Failed to load pending invites:', err);
+    }
+  };
+
+  const handleInvite = async () => {
+    if (!inviteEmail.trim() || !org?.id || !user?.id) return;
+    setInviteLoading(true);
+    try {
+      const token = await accessControl.createInvite(org.id, inviteEmail.trim(), inviteRole, user.id);
+      const link = `${window.location.origin}/accept-invite?token=${token}`;
+      await navigator.clipboard.writeText(link);
+      showMessage('success', `Invite link copied to clipboard! Share it with ${inviteEmail.trim()}`);
+      setInviteEmail('');
+      setShowInvite(false);
+      loadPendingInvites();
+    } catch (err: any) {
+      showMessage('error', err.message || 'Failed to create invite');
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const handleCancelInvite = async (inviteId: string) => {
+    try {
+      await accessControl.cancelInvite(inviteId);
+      loadPendingInvites();
+    } catch (err: any) {
+      showMessage('error', err.message);
     }
   };
 
@@ -210,6 +253,7 @@ export const SettingsPage: React.FC = () => {
   const tabs: { id: Tab; label: string; icon: any }[] = [
     { id: 'access', label: 'Access', icon: Users },
     { id: 'agents', label: 'Agents', icon: Bot },
+    { id: 'appearance', label: 'Appearance', icon: Palette },
     { id: 'billing', label: 'Billing', icon: CreditCard },
     { id: 'branding', label: 'Branding', icon: Palette },
     { id: 'fields', label: 'Fields', icon: SlidersHorizontal },
@@ -243,8 +287,9 @@ export const SettingsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-800 rounded-lg p-1 w-fit">
+      {/* Tabs — scrollable on mobile */}
+      <div className="overflow-x-auto -mx-6 px-6 mb-6">
+      <div className="flex gap-1 bg-gray-800 rounded-lg p-1 w-fit min-w-full sm:min-w-0">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -262,6 +307,7 @@ export const SettingsPage: React.FC = () => {
             </button>
           );
         })}
+      </div>
       </div>
 
       {/* Tab Content */}
@@ -282,14 +328,17 @@ export const SettingsPage: React.FC = () => {
           {/* Invite form */}
           {showInvite && (
             <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-white mb-3">Invite New Member</h3>
-              <p className="text-xs text-gray-400 mb-3">The user must register first, then you can add them to your organization.</p>
+              <h3 className="text-sm font-semibold text-white mb-1">Invite New Member</h3>
+              <p className="text-xs text-gray-400 mb-3">
+                An invite link will be generated and copied to your clipboard. Share it with the person you want to invite — they can join even if they don't have an account yet.
+              </p>
               <div className="flex gap-3">
                 <input
                   type="email"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="User email address"
+                  onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
+                  placeholder="Email address"
                   className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
                 <select
@@ -302,15 +351,43 @@ export const SettingsPage: React.FC = () => {
                   <option value="admin">Admin</option>
                 </select>
                 <button
-                  onClick={() => {
-                    showMessage('success', `Invite flow: user "${inviteEmail}" would be added as ${inviteRole}. (Requires Supabase org_members table)`);
-                    setInviteEmail('');
-                    setShowInvite(false);
-                  }}
-                  className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 transition"
+                  onClick={handleInvite}
+                  disabled={inviteLoading || !inviteEmail.trim()}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition flex items-center gap-2"
                 >
-                  Add
+                  {inviteLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    'Copy Link'
+                  )}
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Pending invites */}
+          {pendingInvites.length > 0 && (
+            <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-700">
+                <h3 className="text-sm font-semibold text-white">Pending Invites</h3>
+              </div>
+              <div className="divide-y divide-gray-700">
+                {pendingInvites.map(invite => (
+                  <div key={invite.id} className="flex items-center justify-between px-4 py-3">
+                    <div>
+                      <p className="text-sm text-white">{invite.email}</p>
+                      <p className="text-xs text-gray-500">
+                        {invite.role} · expires {new Date(invite.expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleCancelInvite(invite.id)}
+                      className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -412,6 +489,7 @@ export const SettingsPage: React.FC = () => {
       )}
 
       {activeTab === 'agents' && <AgentSettingsTab />}
+      {activeTab === 'appearance' && <AppearanceTab />}
       {activeTab === 'billing' && user?.id && <BillingTab userId={user.id} />}
       {activeTab === 'branding' && <BrandingSettingsTab />}
       {activeTab === 'fields' && <FieldSettingsTab />}

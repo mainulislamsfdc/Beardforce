@@ -15,13 +15,14 @@ const adapter = new SupabaseAdapter(config)
 export const databaseService = new DatabaseService(adapter)
 
 // Initialize connection
-export async function initializeDatabase(userId: string) {
+export async function initializeDatabase(userId: string, orgId?: string) {
   databaseService.setUserId(userId)
+  if (orgId) databaseService.setOrgId(orgId)
   const connected = await databaseService.connect()
-  
+
   if (!connected) {
     throw new Error('Failed to connect to database')
   }
-  
+
   return databaseService
 }

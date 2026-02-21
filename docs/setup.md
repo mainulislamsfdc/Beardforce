@@ -26,7 +26,8 @@ Create a `.env` file in the project root:
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-VITE_GEMINI_API_KEY=AIzaSy...
+# VITE_GEMINI_API_KEY is NOT needed in the browser — the key lives server-side.
+# Set it via: supabase secrets set GEMINI_API_KEY=AIzaSy...
 ```
 
 ### Where to get these:
@@ -35,9 +36,9 @@ VITE_GEMINI_API_KEY=AIzaSy...
 |----------|--------|
 | `VITE_SUPABASE_URL` | Supabase Dashboard → Settings → API → Project URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase Dashboard → Settings → API → anon/public key |
-| `VITE_GEMINI_API_KEY` | Google AI Studio → Get API Key |
+| `GEMINI_API_KEY` (server-side secret) | Google AI Studio → Get API Key — set via `supabase secrets set` |
 
-**Important:** All env vars must start with `VITE_` to be exposed to the client via Vite's `import.meta.env`.
+**Important:** All env vars must start with `VITE_` to be exposed to the client. The Gemini key is a **server-side secret** stored in the `gemini-proxy` Edge Function — it never reaches the browser.
 
 ## 3. Supabase Database Setup
 

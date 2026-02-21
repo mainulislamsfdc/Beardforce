@@ -2,13 +2,13 @@
 
 ## Overview
 
-BeardForce uses **Supabase** (hosted PostgreSQL) as its primary database. The database layer follows an **Adapter Pattern** with three layers:
+RunwayCRM uses **Supabase** (hosted PostgreSQL) as its primary database. The database layer follows an **Adapter Pattern** with three layers:
 
 ```
 Component / Agent
        │
        ▼
-DatabaseService (facade) ── auto-injects user_id, business logic
+DatabaseService (facade) ── auto-injects org_id + user_id, business logic
        │
        ▼
 SupabaseAdapter (implements DatabaseAdapter)
@@ -20,19 +20,22 @@ Supabase Client (@supabase/supabase-js)
 PostgreSQL (with Row Level Security)
 ```
 
+**v7 change:** CRM tables were migrated from `user_id`-scoped RLS to `org_id`-scoped RLS. All team members in an organization share the same CRM data. `DatabaseService` now injects both `user_id` (for audit trail) and `org_id` (for RLS) on every write.
+
 ## Tables
 
-BeardForce uses **13 tables** organized into three categories:
+RunwayCRM uses **14 tables** organized into three categories:
 
 ### CRM Tables (6)
 
-These are the core business data tables. All have `user_id` for multi-tenant isolation via RLS.
+These are the core business data tables. All have `org_id` for org-level multi-tenant isolation via RLS (v7). `user_id` is retained as an audit trail (who created the record) but RLS filters by `org_id`.
 
 #### `leads`
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | uuid | Primary key (auto-generated) |
-| `user_id` | uuid | Owner (references auth.users) |
+| `org_id` | uuid | Organization (references organizations.id) — **RLS key** |
+| `user_id` | uuid | Creator (references auth.users) — audit only |
 | `name` | text | Lead full name |
 | `email` | text | Email address |
 | `phone` | text | Phone number |
@@ -49,7 +52,8 @@ These are the core business data tables. All have `user_id` for multi-tenant iso
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | uuid | Primary key |
-| `user_id` | uuid | Owner |
+| `org_id` | uuid | Organization — **RLS key** |
+| `user_id` | uuid | Creator — audit only |
 | `name` | text | Contact full name |
 | `email` | text | Email address |
 | `phone` | text | Phone number |
@@ -63,7 +67,8 @@ These are the core business data tables. All have `user_id` for multi-tenant iso
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | uuid | Primary key |
-| `user_id` | uuid | Owner |
+| `org_id` | uuid | Organization — **RLS key** |
+| `user_id` | uuid | Creator — audit only |
 | `name` | text | Account/company name |
 | `industry` | text | Industry vertical |
 | `website` | text | Company website |
@@ -79,7 +84,8 @@ These are the core business data tables. All have `user_id` for multi-tenant iso
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | uuid | Primary key |
-| `user_id` | uuid | Owner |
+| `org_id` | uuid | Organization — **RLS key** |
+| `user_id` | uuid | Creator — audit only |
 | `title` | text | Opportunity title |
 | `amount` | decimal | Deal value |
 | `stage` | text | Pipeline stage (prospecting, qualification, proposal, negotiation, closed_won, closed_lost) |
@@ -96,7 +102,8 @@ These are the core business data tables. All have `user_id` for multi-tenant iso
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | uuid | Primary key |
-| `user_id` | uuid | Owner |
+| `org_id` | uuid | Organization — **RLS key** |
+| `user_id` | uuid | Creator — audit only |
 | `order_number` | text | Order reference number |
 | `status` | text | Order status |
 | `total_amount` | decimal | Total order value |
@@ -109,7 +116,8 @@ These are the core business data tables. All have `user_id` for multi-tenant iso
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | uuid | Primary key |
-| `user_id` | uuid | Owner |
+| `org_id` | uuid | Organization — **RLS key** |
+| `user_id` | uuid | Creator — audit only |
 | `name` | text | Product name |
 | `description` | text | Product description |
 | `price` | decimal | Unit price |
@@ -165,10 +173,10 @@ Stores database connection configurations.
 | `config` | json | Connection config (encrypted) |
 | `created_at` | timestamp | Creation timestamp |
 
-### v2 Tables (5)
+### v2/v7 Tables (6)
 
 #### `organizations`
-Multi-tenant organization support.
+Multi-tenant organization (workspace) support.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -190,6 +198,21 @@ Organization membership with roles.
 | `email` | text | User email |
 | `invited_by` | uuid | Who invited this user |
 | `joined_at` | timestamp | Join timestamp |
+
+#### `org_invites` (v7 — new)
+Invite tokens for the Slack-style invite system.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `org_id` | uuid | Target organization (FK → organizations.id, CASCADE) |
+| `email` | text | Invitee email |
+| `role` | text | Role to assign on accept (admin, editor, viewer) |
+| `token` | text | 64-char hex token (32 random bytes) — **UNIQUE** |
+| `invited_by` | uuid | Admin who sent the invite (FK → auth.users.id) |
+| `status` | text | pending / accepted / cancelled |
+| `expires_at` | timestamptz | 7 days from creation |
+| `created_at` | timestamptz | Creation timestamp |
 
 #### `code_snippets`
 Stores AI-generated code from IT Agent.
@@ -300,10 +323,24 @@ Implements `DatabaseAdapter` using the Supabase JS client. Contains pre-defined 
 
 **File:** `services/database/DatabaseService.ts`
 
-Wraps the adapter with user-scoped operations. Key behaviors:
+Wraps the adapter with org-scoped operations. Key behaviors:
 
-### User ID Auto-Injection
-Every query method automatically adds `{ column: 'user_id', operator: '=', value: this.getUserId() }` to the filter array. Every create method adds `user_id` to the inserted record. This ensures multi-tenant data isolation at the application level (on top of RLS at the database level).
+### Org ID + User ID Auto-Injection (v7)
+Every **write** method injects both:
+- `org_id: this.getOrgId()` — used by RLS to scope data to the organization
+- `user_id: this.getUserId()` — kept for audit trail (who created the record)
+
+Every **read** method filters by `org_id` so all org members see shared data.
+
+```typescript
+// Set after OrgContext loads membership:
+databaseService.setOrgId(orgId);
+
+// Fallback: if orgId not set, uses userId (solo user scenario)
+getOrgId(): string → returns orgId ?? getUserId()
+```
+
+`setOrgId()` is called automatically by `OrgContext` after loading the membership. Components do not need to call it directly — they only need `initializeDatabase(user.id)` on mount.
 
 ### Entity Methods
 
@@ -383,48 +420,70 @@ setConfig(key, value): Promise<void>
 const adapter = new SupabaseAdapter(config);
 export const databaseService = new DatabaseService(adapter);
 
-export async function initializeDatabase(userId: string) {
+export async function initializeDatabase(userId: string, orgId?: string) {
   databaseService.setUserId(userId);
-  await databaseService.connect();
+  if (orgId) databaseService.setOrgId(orgId);
+  const connected = await databaseService.connect();
+  if (!connected) throw new Error('Failed to connect to database');
   return databaseService;
 }
 ```
 
-**Important:** Every component that uses `databaseService` must call `initializeDatabase(user.id)` first. Without this, `getUserId()` throws "User ID not set" and queries fail with "Database not connected."
+**Important:** Every component that uses `databaseService` must call `initializeDatabase(user.id)` first. Without this, `getUserId()` throws "User ID not set" and queries fail.
+
+`orgId` is optional in `initializeDatabase` because `OrgContext` sets it separately via `databaseService.setOrgId()` after loading the org membership. By the time an agent uses the service, both `userId` and `orgId` are set.
 
 ---
 
 ## Row Level Security (RLS)
 
-All CRM tables enforce RLS so users can only access their own data:
+### CRM Tables (v7 — org-scoped)
+
+All CRM tables use `org_id`-based RLS so all org members share data:
 
 ```sql
--- Standard CRM table policy
-CREATE POLICY "Users can manage own data"
-ON leads FOR ALL
-USING (user_id = auth.uid())
-WITH CHECK (user_id = auth.uid());
+-- Standard org-scoped policy (applied to leads, contacts, accounts, etc.)
+CREATE POLICY "leads_org_select" ON leads FOR SELECT
+  USING (org_id = public.get_user_org_id());
+CREATE POLICY "leads_org_insert" ON leads FOR INSERT
+  WITH CHECK (org_id = public.get_user_org_id());
+CREATE POLICY "leads_org_update" ON leads FOR UPDATE
+  USING (org_id = public.get_user_org_id());
+CREATE POLICY "leads_org_delete" ON leads FOR DELETE
+  USING (org_id = public.get_user_org_id());
 ```
 
-Organization tables use a `SECURITY DEFINER` function to avoid infinite recursion:
+The `get_user_org_id()` SECURITY DEFINER function avoids infinite recursion:
 
 ```sql
-CREATE OR REPLACE FUNCTION get_user_org_id(uid uuid)
-RETURNS uuid
-LANGUAGE sql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT org_id FROM org_members WHERE user_id = uid LIMIT 1;
+CREATE OR REPLACE FUNCTION public.get_user_org_id()
+RETURNS uuid LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  SELECT org_id FROM org_members WHERE user_id = auth.uid() LIMIT 1;
 $$;
-
--- Separate INSERT policy (new user has no org yet)
-CREATE POLICY "org_insert" ON organizations
-FOR INSERT WITH CHECK (created_by = auth.uid());
-
--- SELECT/UPDATE/DELETE use the function
-CREATE POLICY "org_select" ON organizations
-FOR SELECT USING (id = get_user_org_id(auth.uid()));
 ```
+
+### Organization Tables
+
+```sql
+-- Separate INSERT policy (new user has no org yet, so get_user_org_id() returns NULL)
+CREATE POLICY "org_insert" ON organizations
+  FOR INSERT WITH CHECK (created_by = auth.uid());
+
+CREATE POLICY "org_select" ON organizations
+  FOR SELECT USING (id = public.get_user_org_id());
+```
+
+### Migrations Reference
+
+| Migration | Tables / Changes |
+|-----------|-----------------|
+| `001_rls_policies.sql` | RLS on all original tables + org helper function |
+| `002_integrations.sql` | integration_configs, subscriptions |
+| `003_workflows.sql` | workflow_runs |
+| `004_api_keys.sql` | api_keys + rate limits |
+| `005_observability.sql` | agent_traces, feature flags |
+| `006_org_invites_and_org_scope.sql` | org_invites table + org_id added to CRM tables + updated RLS |
+
+Run migrations in order in Supabase SQL Editor. Each migration is idempotent — safe to re-run.
 
 See [auth-and-access.md](auth-and-access.md) for the complete RLS policy reference.
